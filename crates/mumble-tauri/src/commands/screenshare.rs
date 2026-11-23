@@ -58,7 +58,9 @@ fn sync_capture_exclusion(app: &AppHandle) {
         if let Err(error) = app.run_on_main_thread(move || {
             set_own_windows_excluded_from_capture(&app_for_main_thread, hide);
         }) {
-            tracing::warn!("screenshare: failed to schedule capture exclusion on the main thread: {error}");
+            tracing::warn!(
+                "screenshare: failed to schedule capture exclusion on the main thread: {error}"
+            );
         }
     }
 
