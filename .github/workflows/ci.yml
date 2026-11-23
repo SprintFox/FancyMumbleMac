@@ -12,7 +12,9 @@ on:
 # told about.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  # Preserve upstream release serialization, but let this fork replace stale
+  # CI runs when a newer commit is pushed to the same branch.
+  cancel-in-progress: ${{ github.repository != 'Fancy-Mumble/FancyMumble' || github.event_name == 'pull_request' }}
 
 env:
   CARGO_TERM_COLOR: always
