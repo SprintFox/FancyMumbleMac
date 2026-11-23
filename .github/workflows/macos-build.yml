@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -74,3 +74,19 @@ jobs:
             target/release/bundle/dmg/*.dmg
           if-no-files-found: error
           retention-days: 14
+
+      - name: Publish GitHub pre-release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: sprintfox-v0.4.0-beta.208
+          name: FancyMumble 0.4.0-beta.208 — SprintFox build
+          body: |
+            macOS build from the SprintFox fork, based on upstream FancyMumble v0.4.0-beta.208.
+
+            Includes the fork's macOS main-thread window/capture fixes.
+            This build is unsigned and not notarized by Apple.
+          prerelease: true
+          make_latest: false
+          files: crates/mumble-tauri/target/release/bundle/dmg/*.dmg
+          fail_on_unmatched_files: true
