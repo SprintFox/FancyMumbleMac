@@ -800,6 +800,7 @@ jobs:
     name: Release
     needs: [version-check, build, build-android, build-minimal]
     if: >-
+      github.repository == 'Fancy-Mumble/FancyMumble' &&
       github.event_name == 'push' &&
       (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/beta')
     runs-on: ubuntu-latest
