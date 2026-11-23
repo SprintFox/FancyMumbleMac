@@ -1,0 +1,76 @@
+name: macOS build
+
+concurrency:
+  group: macos-build-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches:
+      - main
+      - work/beta-0.4.0-beta.208
+    paths:
+      - '**'
+      - '.github/workflows/macos-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build Fancy Mumble 0.4.0-beta.208 (macOS)
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: macos-beta-208
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: crates/mumble-tauri/ui/package-lock.json
+
+      - name: Install Protocol Buffers compiler
+        run: brew install protobuf
+
+      - name: Install Tauri CLI
+        uses: taiki-e/install-action@v2
+        with:
+          tool: tauri-cli
+
+      - name: Install frontend dependencies
+        working-directory: crates/mumble-tauri/ui
+        run: npm ci
+
+      - name: Verify frontend type-check and tests
+        working-directory: crates/mumble-tauri/ui
+        run: |
+          npx tsc --noEmit
+          npm test
+
+      - name: Build macOS app and DMG
+        working-directory: crates/mumble-tauri
+        run: >
+          cargo tauri build --bundles app,dmg
+          --config '{"version":"0.4.0-beta.208","bundle":{"createUpdaterArtifacts":false}}'
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: FancyMumble-0.4.0-beta.208-macOS
+          path: |
+            target/release/bundle/macos/*.app
+            target/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+          retention-days: 14
