@@ -36,7 +36,8 @@
           "**"
         ]
       }
-    }
+    },
+    "macOSPrivateApi": true
   },
   "bundle": {
     "active": true,
@@ -56,6 +57,5 @@
         "installMode": "quiet"
       }
     }
-  },
-  "macOSPrivateApi": true
+  }
 }
