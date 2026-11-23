@@ -158,16 +158,21 @@ pub(crate) async fn open_drawing_overlay(
     #[cfg(target_os = "linux")]
     configure_linux_window(&app, &window, linux_mode).await?;
 
-    // Click-through, and only now: the window must already be on screen.
-    // tao reaches for the `GdkWindow` to set an empty input region and
-    // unwraps it (0.34 `event_loop.rs:448`), and an unrealized window has
-    // none - which aborts the process, not just the call. Everything above
-    // has made the window visible by this point, on every platform.
-    if let Err(e) = window.set_ignore_cursor_events(true) {
-        tracing::warn!("draw-overlay: set_ignore_cursor_events failed: {e}");
-    }
-    if let Err(e) = window.set_excluded_from_capture(true) {
-        tracing::warn!("draw-overlay: capture exclusion not applied: {e}");
+    // Click-through and native capture exclusion both touch platform
+    // window APIs. In particular, set_excluded_from_capture sends an
+    // NSWindow message on macOS, so schedule both operations on Tauri's
+    // main thread. The window has already been realized (and configured
+    // through the portal path above) before we enqueue this work.
+    let overlay_window = window.clone();
+    if let Err(e) = app.run_on_main_thread(move || {
+        if let Err(e) = overlay_window.set_ignore_cursor_events(true) {
+            tracing::warn!("draw-overlay: set_ignore_cursor_events failed: {e}");
+        }
+        if let Err(e) = overlay_window.set_excluded_from_capture(true) {
+            tracing::warn!("draw-overlay: capture exclusion not applied: {e}");
+        }
+    }) {
+        tracing::warn!("draw-overlay: failed to schedule native window configuration: {e}");
     }
 
     #[cfg(any(target_os = "windows", target_os = "linux"))]
