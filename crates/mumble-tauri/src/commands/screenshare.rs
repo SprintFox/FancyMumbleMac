@@ -48,6 +48,21 @@ static BROADCASTING_SCREEN: AtomicBool = AtomicBool::new(false);
 fn sync_capture_exclusion(app: &AppHandle) {
     let hide = BROADCASTING_SCREEN.load(Ordering::Relaxed)
         && HIDE_SELF_FROM_CAPTURE.load(Ordering::Relaxed);
+
+    // The macOS implementation calls NSWindow.setSharingType directly.
+    // Screen-share lifecycle and preference commands may run on Tokio's
+    // worker threads, but AppKit requires this mutation on the main thread.
+    #[cfg(target_os = "macos")]
+    {
+        let app_for_main_thread = app.clone();
+        if let Err(error) = app.run_on_main_thread(move || {
+            set_own_windows_excluded_from_capture(&app_for_main_thread, hide);
+        }) {
+            tracing::warn!("screenshare: failed to schedule capture exclusion on the main thread: {error}");
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
     set_own_windows_excluded_from_capture(app, hide);
 }
 
