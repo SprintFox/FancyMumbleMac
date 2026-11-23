@@ -175,7 +175,7 @@ impl DenoiserBackend for OmlsaBackend {
 fn exp_int_approx(v: f32) -> f32 {
     let v = v.max(1e-6);
     if v < 0.1 {
-        const EULER_MASCHERONI: f32 = 0.577_215_7;
+        const EULER_MASCHERONI: f32 = std::f32::consts::EULER_GAMMA;
         -0.5 * (EULER_MASCHERONI + v.ln())
     } else {
         0.5 * (-v).exp() / (v + 0.5 + 1.0 / (v + 1.5))
