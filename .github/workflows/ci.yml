@@ -112,7 +112,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-24.04, windows-latest]
     env:
       # Clippy and the unit tests compile mumble-tauri, whose build.rs would
       # otherwise probe for the Qt MinGW kit to build the minimal client and,
@@ -313,7 +313,7 @@ jobs:
           # unable to install the stable release over it. The updater only
           # ever consumes the NSIS installer and the AppImage anyway.
           - name: Linux
-            os: ubuntu-latest
+            os: ubuntu-24.04
             beta-bundles: "appimage"
           - name: Windows
             os: windows-latest

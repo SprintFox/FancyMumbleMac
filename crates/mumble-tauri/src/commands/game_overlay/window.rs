@@ -71,9 +71,7 @@ pub(super) fn ensure(app: &AppHandle, hide_from_capture: bool) -> Result<Webview
         if let Err(e) = overlay_window.set_ignore_cursor_events(true) {
             tracing::warn!("game-overlay: set_ignore_cursor_events failed: {e}");
         }
-        if hide_from_capture
-            && let Err(e) = overlay_window.set_excluded_from_capture(true)
-        {
+        if hide_from_capture && let Err(e) = overlay_window.set_excluded_from_capture(true) {
             tracing::info!("game-overlay: capture exclusion not applied: {e}");
         }
     }) {
