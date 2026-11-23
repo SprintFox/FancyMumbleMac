@@ -63,11 +63,21 @@ pub(super) fn ensure(app: &AppHandle, hide_from_capture: bool) -> Result<Webview
     .build()
     .map_err(|e: tauri::Error| e.to_string())?;
 
-    if let Err(e) = window.set_ignore_cursor_events(true) {
-        tracing::warn!("game-overlay: set_ignore_cursor_events failed: {e}");
-    }
-    if hide_from_capture && let Err(e) = window.set_excluded_from_capture(true) {
-        tracing::info!("game-overlay: capture exclusion not applied: {e}");
+    // These operations reach platform-native window APIs. In particular,
+    // macOS capture exclusion sends an NSWindow message and must run on
+    // AppKit's main thread; the game-overlay watcher itself is async.
+    let overlay_window = window.clone();
+    if let Err(e) = app.run_on_main_thread(move || {
+        if let Err(e) = overlay_window.set_ignore_cursor_events(true) {
+            tracing::warn!("game-overlay: set_ignore_cursor_events failed: {e}");
+        }
+        if hide_from_capture
+            && let Err(e) = overlay_window.set_excluded_from_capture(true)
+        {
+            tracing::info!("game-overlay: capture exclusion not applied: {e}");
+        }
+    }) {
+        tracing::warn!("game-overlay: failed to schedule native window configuration: {e}");
     }
     crate::platform::strip_system_chrome(&window);
     warn_if_wayland();
