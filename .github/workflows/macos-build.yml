@@ -88,5 +88,5 @@ jobs:
             This build is unsigned and not notarized by Apple.
           prerelease: true
           make_latest: false
-          files: crates/mumble-tauri/target/release/bundle/dmg/*.dmg
+          files: target/release/bundle/dmg/*.dmg
           fail_on_unmatched_files: true
