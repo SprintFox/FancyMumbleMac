@@ -9,15 +9,25 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: invokeMock }));
 describe("ScreenSharePanel", () => {
   beforeEach(() => {
     invokeMock.mockReset();
-    invokeMock.mockImplementation((command: string) =>
-      command === "list_capture_sources"
-        ? Promise.resolve([
-            { id: 1, kind: "screen", title: "Main display", width: 2560, height: 1440 },
-            { id: 2, kind: "window", title: "Project window", width: 1280, height: 900 },
-          ])
-        : command === "capture_source_thumbnail"
-          ? Promise.resolve("data:image/jpeg;base64,preview")
-          : Promise.resolve(undefined),
+    invokeMock.mockImplementation((command: string, args?: { includeDevices?: boolean }) =>
+      command === "request_screen_capture_access" || command === "request_camera_access"
+        ? Promise.resolve(true)
+        : command === "list_capture_sources"
+          ? Promise.resolve(
+              args?.includeDevices
+                ? [
+                    { id: 1, kind: "screen", title: "Main display", width: 2560, height: 1440 },
+                    { id: 2, kind: "window", title: "Project window", width: 1280, height: 900 },
+                    { id: 8, kind: "device", title: "Studio camera", width: 1920, height: 1080 },
+                  ]
+                : [
+                    { id: 1, kind: "screen", title: "Main display", width: 2560, height: 1440 },
+                    { id: 2, kind: "window", title: "Project window", width: 1280, height: 900 },
+                  ],
+            )
+          : command === "capture_source_thumbnail"
+            ? Promise.resolve("data:image/jpeg;base64,preview")
+            : Promise.resolve(undefined),
     );
     useAppStore.setState({ broadcastingSessions: new Set([7]), users: [], isSharingOwn: false });
   });
@@ -37,15 +47,21 @@ describe("ScreenSharePanel", () => {
   });
 
   it("combines a display and camera and forwards the selected encoder settings", async () => {
-    invokeMock.mockImplementation((command: string) =>
-      command === "list_capture_sources"
-        ? Promise.resolve([
-            { id: 1, kind: "screen", title: "Main display", width: 2560, height: 1440 },
-            { id: 8, kind: "device", title: "Studio camera", width: 1920, height: 1080 },
-          ])
-        : command === "capture_source_thumbnail"
-          ? Promise.resolve("data:image/jpeg;base64,preview")
-          : Promise.resolve(undefined),
+    invokeMock.mockImplementation((command: string, args?: { includeDevices?: boolean }) =>
+      command === "request_screen_capture_access" || command === "request_camera_access"
+        ? Promise.resolve(true)
+        : command === "list_capture_sources"
+          ? Promise.resolve(
+              args?.includeDevices
+                ? [
+                    { id: 1, kind: "screen", title: "Main display", width: 2560, height: 1440 },
+                    { id: 8, kind: "device", title: "Studio camera", width: 1920, height: 1080 },
+                  ]
+                : [{ id: 1, kind: "screen", title: "Main display", width: 2560, height: 1440 }],
+            )
+          : command === "capture_source_thumbnail"
+            ? Promise.resolve("data:image/jpeg;base64,preview")
+            : Promise.resolve(undefined),
     );
     const confirmSource = vi.fn().mockResolvedValue(undefined);
     render(

@@ -69,6 +69,8 @@ jobs:
       - name: Verify macOS privacy usage descriptions
         run: |
           APP="target/release/bundle/macos/FancyMumble.app/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Print :NSScreenCaptureUsageDescription" "$APP"
+          /usr/libexec/PlistBuddy -c "Print :NSAudioCaptureUsageDescription" "$APP"
           /usr/libexec/PlistBuddy -c "Print :NSCameraUsageDescription" "$APP"
           /usr/libexec/PlistBuddy -c "Print :NSMicrophoneUsageDescription" "$APP"
 

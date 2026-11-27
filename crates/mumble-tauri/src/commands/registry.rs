@@ -352,6 +352,7 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::screenshare::screen_share_capabilities,
         #[cfg(not(target_os = "android"))]
         super::screenshare::request_camera_access,
+        super::screenshare::request_screen_capture_access,
         #[cfg(not(target_os = "android"))]
         super::screenshare::self_capture_exclusion,
         #[cfg(not(target_os = "android"))]

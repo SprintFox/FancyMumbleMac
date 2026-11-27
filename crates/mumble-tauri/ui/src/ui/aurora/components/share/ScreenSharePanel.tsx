@@ -127,6 +127,8 @@ export default function ScreenSharePanel({
   const [thumbnails, setThumbnails] = useState<ReadonlyMap<string, string>>(new Map());
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loadingDevices, setLoadingDevices] = useState(false);
+  const [cameraAccessReady, setCameraAccessReady] = useState(false);
   const [settings, setSettings] = useState<StreamSettings>(() =>
     initialStreamSettings(controller?.settings ?? QUALITY_PRESETS.hd),
   );
@@ -137,20 +139,34 @@ export default function ScreenSharePanel({
 
   useEffect(() => {
     let cancelled = false;
-    void invoke<CaptureSource[]>("list_capture_sources")
-      .then((items) => {
-        if (cancelled) return;
-        setSources(items);
-        const first = items.find((item) => item.kind === "screen") ?? items[0] ?? null;
-        setSelected(first);
-        if (first) setTab(first.kind);
-      })
-      .catch((reason) => {
-        if (!cancelled) {
-          setSources([]);
-          setError(String(reason));
-        }
-      });
+    void (async () => {
+      // The Aurora picker is a separate UI from the standard picker. Request
+      // Screen Recording access here too, before enumerating or previewing
+      // any desktop source.
+      const granted = await invoke<boolean>("request_screen_capture_access");
+      if (cancelled) return;
+      if (!granted) {
+        setSources([]);
+        setError(
+          "Screen Recording permission is required. Enable Fancy Mumble in System Settings > Privacy & Security > Screen & System Audio Recording, then quit and reopen the app.",
+        );
+        return;
+      }
+
+      // On macOS the first source query deliberately excludes AVFoundation
+      // devices. The camera permission/init flow runs only when Cameras opens.
+      const items = await invoke<CaptureSource[]>("list_capture_sources");
+      if (cancelled) return;
+      setSources(items);
+      const first = items.find((item) => item.kind === "screen") ?? items[0] ?? null;
+      setSelected(first);
+      if (first) setTab(first.kind);
+    })().catch((reason) => {
+      if (!cancelled) {
+        setSources([]);
+        setError(String(reason));
+      }
+    });
     return () => {
       cancelled = true;
     };
@@ -185,6 +201,39 @@ export default function ScreenSharePanel({
       /* Storage can be disabled by platform policy. */
     }
   }, [settings]);
+
+  const selectTab = async (kind: CaptureSourceKind) => {
+    setTab(kind);
+    setError(null);
+    if (kind !== "device" || cameraAccessReady) {
+      return;
+    }
+
+    setLoadingDevices(true);
+    try {
+      // Nokhwa's AVFoundation backend must be initialized before even
+      // querying cameras; Linux uses this same point for portal consent.
+      const granted = await invoke<boolean>("request_camera_access");
+      if (!granted) {
+        setError("Camera access was denied in the system dialog.");
+        return;
+      }
+      setCameraAccessReady(true);
+      if (!sources?.some((source) => source.kind === "device")) {
+        const items = await invoke<CaptureSource[]>("list_capture_sources", {
+          includeDevices: true,
+        });
+        setSources((current) => [
+          ...(current ?? []).filter((source) => source.kind !== "device"),
+          ...items.filter((source) => source.kind === "device"),
+        ]);
+      }
+    } catch (reason) {
+      setError(String(reason));
+    } finally {
+      setLoadingDevices(false);
+    }
+  };
 
   const visibleSources = sources?.filter((source) => source.kind === tab) ?? [];
   const EmptyIcon = iconFor(tab);
@@ -286,7 +335,7 @@ export default function ScreenSharePanel({
               aria-selected={tab === kind}
               className={tab === kind ? styles.shareTabActive : styles.shareTab}
               leadingIcon={<Icon />}
-              onClick={() => setTab(kind)}
+              onClick={() => void selectTab(kind)}
             >
               {label}
               <small>{sources?.filter((source) => source.kind === kind).length ?? 0}</small>
@@ -347,6 +396,8 @@ export default function ScreenSharePanel({
                 <i />
               </div>
             ))
+          ) : loadingDevices ? (
+            <div className={styles.shareEmpty}>Requesting camera access…</div>
           ) : visibleSources.length > 0 ? (
             visibleSources.map((source) => (
               <SourceCard

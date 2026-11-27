@@ -124,6 +124,10 @@ export default function ScreenSharePickerDialog({
   const [sources, setSources] = useState<CaptureSource[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [thumbs, setThumbs] = useState<ReadonlyMap<string, string>>(new Map());
+  const [loadingDevices, setLoadingDevices] = useState(false);
+  const [cameraAccessReady, setCameraAccessReady] = useState(
+    deviceOnly || (initialSelection ?? []).some((source) => source.kind === "device"),
+  );
   /** Selected screen OR window (they replace each other). */
   const [selectedDisplay, setSelectedDisplay] = useState<CaptureSource | null>(null);
   /** Selected camera; combinable with a display source. */
@@ -132,45 +136,65 @@ export default function ScreenSharePickerDialog({
 
   useEffect(() => {
     let cancelled = false;
-    invoke<CaptureSource[]>("list_capture_sources")
-      .then((list) => {
+    void (async () => {
+      // A device-only picker is opened only after request_camera_access has
+      // completed in useScreenShare. A normal display picker must first pass
+      // macOS Screen Recording TCC; never enumerate/capture sources blindly.
+      if (!deviceOnly) {
+        const granted = await invoke<boolean>("request_screen_capture_access");
         if (cancelled) return;
-        // Camera-only mode never shows (or thumbnails) screens/windows.
-        const usable = deviceOnly ? list.filter((s) => s.kind === "device") : list;
-        setSources(usable);
-        // Seed the selection from the active broadcast (once, on load):
-        // match each seeded source against the fresh list so vanished
-        // sources are silently dropped rather than re-shared blind.
-        for (const seed of initialSelection ?? []) {
-          if (deviceOnly && seed.kind !== "device") {
-            // Portal-picked display source: its advisory id is not in the
-            // list, but it must survive the confirm so adding a camera keeps
-            // the live screen track. Represent it as a synthetic card-less
-            // selection (chip only).
-            setSelectedDisplay(
-              (prev) =>
-                prev ?? {
-                  id: seed.id,
-                  kind: seed.kind,
-                  title: t("screenShare.picker.systemPickedDisplay"),
-                  width: 0,
-                  height: 0,
-                },
-            );
-            continue;
-          }
-          const live = usable.find((s) => s.kind === seed.kind && s.id === seed.id);
-          if (!live) continue;
-          if (live.kind === "device") {
-            setSelectedDevice((prev) => prev ?? live);
-          } else {
-            setSelectedDisplay((prev) => prev ?? live);
-          }
+        if (!granted) {
+          setLoadError(
+            "Screen Recording permission is required. Enable Fancy Mumble in System Settings > Privacy & Security > Screen & System Audio Recording, then quit and reopen the app.",
+          );
+          return;
         }
-      })
-      .catch((e) => {
-        if (!cancelled) setLoadError(e instanceof Error ? e.message : String(e));
-      });
+      }
+
+      // Preserve cameras already in an active broadcast; otherwise defer
+      // AVFoundation enumeration until the user explicitly selects Devices.
+      const includeDevices =
+        deviceOnly || (initialSelection ?? []).some((source) => source.kind === "device");
+      const list = includeDevices
+        ? await invoke<CaptureSource[]>("list_capture_sources", { includeDevices: true })
+        : await invoke<CaptureSource[]>("list_capture_sources");
+      if (cancelled) return;
+
+      // Camera-only mode never shows (or thumbnails) screens/windows.
+      const usable = deviceOnly ? list.filter((s) => s.kind === "device") : list;
+      setSources(usable);
+      // Seed the selection from the active broadcast (once, on load):
+      // match each seeded source against the fresh list so vanished
+      // sources are silently dropped rather than re-shared blind.
+      for (const seed of initialSelection ?? []) {
+        if (deviceOnly && seed.kind !== "device") {
+          // Portal-picked display source: its advisory id is not in the
+          // list, but it must survive the confirm so adding a camera keeps
+          // the live screen track. Represent it as a synthetic card-less
+          // selection (chip only).
+          setSelectedDisplay(
+            (prev) =>
+              prev ?? {
+                id: seed.id,
+                kind: seed.kind,
+                title: t("screenShare.picker.systemPickedDisplay"),
+                width: 0,
+                height: 0,
+              },
+          );
+          continue;
+        }
+        const live = usable.find((s) => s.kind === seed.kind && s.id === seed.id);
+        if (!live) continue;
+        if (live.kind === "device") {
+          setSelectedDevice((prev) => prev ?? live);
+        } else {
+          setSelectedDisplay((prev) => prev ?? live);
+        }
+      }
+    })().catch((e) => {
+      if (!cancelled) setLoadError(e instanceof Error ? e.message : String(e));
+    });
     return () => {
       cancelled = true;
     };
@@ -223,6 +247,38 @@ export default function ScreenSharePickerDialog({
     }
   };
 
+  const selectTab = async (next: PickerTab) => {
+    setTab(next);
+    setLoadError(null);
+    if (next !== "devices") return;
+    if (cameraAccessReady) return;
+
+    setLoadingDevices(true);
+    try {
+      // This is required on Linux for the portal consent flow and on macOS
+      // to initialize AVFoundation before the first Nokhwa query.
+      const granted = await invoke<boolean>("request_camera_access");
+      if (!granted) {
+        setLoadError("Camera access was denied in the system dialog.");
+        return;
+      }
+      setCameraAccessReady(true);
+      if (!sources?.some((source) => source.kind === "device")) {
+        const allSources = await invoke<CaptureSource[]>("list_capture_sources", {
+          includeDevices: true,
+        });
+        setSources((current) => [
+          ...(current ?? []).filter((source) => source.kind !== "device"),
+          ...allSources.filter((source) => source.kind === "device"),
+        ]);
+      }
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setLoadingDevices(false);
+    }
+  };
+
   /** Double-click quick-share: this card plus the other group's pick. */
   const confirmWith = (src: CaptureSource) => {
     const display = src.kind === "device" ? selectedDisplay : src;
@@ -238,6 +294,7 @@ export default function ScreenSharePickerDialog({
 
   const renderStatus = (): string | null => {
     if (loadError !== null) return t("screenShare.picker.loadFailed", { detail: loadError });
+    if (loadingDevices) return t("screenShare.picker.loading");
     if (visibleSources === null) return t("screenShare.picker.loading");
     if (visibleSources.length === 0) {
       return tab === "devices" ? t("screenShare.picker.emptyDevices") : t("screenShare.picker.empty");
@@ -274,7 +331,7 @@ export default function ScreenSharePickerDialog({
                   role="tab"
                   aria-selected={tab === p}
                   className={`${styles.tab} ${tab === p ? styles.tabActive : ""}`}
-                  onClick={() => setTab(p)}
+                  onClick={() => void selectTab(p)}
                   data-testid={TID.screenSharePickerTab}
                   data-tab={p}
                 >

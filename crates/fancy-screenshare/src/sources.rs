@@ -47,6 +47,16 @@ pub struct CaptureSource {
 /// portal dialog chooses the concrete source. Cameras enumerate normally
 /// there (V4L2 needs no portal).
 pub fn list_sources() -> Result<Vec<CaptureSource>, String> {
+    list_sources_with_devices(true)
+}
+
+/// Enumerate desktop sources and optionally cameras.
+///
+/// macOS camera enumeration is intentionally opt-in: AVFoundation requires
+/// explicit initialization before *any* query. The source picker initially
+/// asks for displays/windows only and calls this with `include_devices = true`
+/// only after the user opens the camera tab and grants access.
+pub fn list_sources_with_devices(include_devices: bool) -> Result<Vec<CaptureSource>, String> {
     let native = native_sources();
 
     #[cfg(all(target_os = "linux", feature = "gpu"))]
@@ -67,16 +77,74 @@ pub fn list_sources() -> Result<Vec<CaptureSource>, String> {
                 height: 0,
             },
         ];
-        out.extend(crate::camera::list_devices());
+        if include_devices {
+            out.extend(crate::camera::list_devices());
+        }
         return Ok(out);
     }
 
     native.map(|mut list| {
-        list.extend(crate::camera::list_devices());
+        if include_devices {
+            list.extend(crate::camera::list_devices());
+        }
         list
     })
 }
 
+// CoreGraphics exposes the Screen Recording TCC functions as a C API.
+// Keep the only unsafe FFI boundary in this small, reviewed wrapper; the rest
+// of fancy-screenshare remains subject to the workspace's unsafe_code = deny.
+#[cfg(target_os = "macos")]
+#[allow(unsafe_code)]
+mod screen_recording_permission {
+    #[link(name = "CoreGraphics", kind = "framework")]
+    #[allow(non_snake_case)]
+    unsafe extern "C" {
+        fn CGPreflightScreenCaptureAccess() -> bool;
+        fn CGRequestScreenCaptureAccess() -> bool;
+    }
+
+    pub(super) fn request_access() -> bool {
+        // Both APIs take no pointers and return a plain bool; there are no
+        // caller-side memory or lifetime obligations at this FFI boundary.
+        unsafe {
+            if CGPreflightScreenCaptureAccess() {
+                return true;
+            }
+            let _requested = CGRequestScreenCaptureAccess();
+            // Re-check: some macOS releases require the application to be
+            // relaunched after the user grants screen recording permission.
+            CGPreflightScreenCaptureAccess()
+        }
+    }
+}
+
+/// Request macOS Screen Recording permission using the documented CoreGraphics TCC API.
+#[cfg(target_os = "macos")]
+pub fn request_screen_capture_access() -> bool {
+    if !screen_recording_permission::request_access() {
+        return false;
+    }
+
+    // Ask ScreenCaptureKit itself to resolve shareable content too. This
+    // surfaces TCC errors from the framework before the picker starts
+    // requesting thumbnails and before any capture stream is constructed.
+    crate::macos_capture::list_sources().is_ok()
+}
+
+#[cfg(not(target_os = "macos"))]
+fn monitor_title(index: usize, name: Option<String>) -> String {
+    match name
+        .as_deref()
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+    {
+        Some(name) => format!("Screen {} ({name})", index + 1),
+        None => format!("Screen {}", index + 1),
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
 fn native_sources() -> Result<Vec<CaptureSource>, String> {
     let mut out = Vec::new();
 
@@ -86,14 +154,17 @@ fn native_sources() -> Result<Vec<CaptureSource>, String> {
         .enumerate()
     {
         let Ok(id) = monitor.id() else { continue };
-        let name = monitor.name().unwrap_or_default();
+        // XCap 0.6.2 resolves a monitor name through AppKit's
+        // NSScreen::screens using MainThreadMarker::new_unchecked. This
+        // command runs on Tauri's blocking pool, not the AppKit main thread.
+        // A friendly name is cosmetic; avoid crossing that thread boundary
+        // rather than risking an AppKit assertion / process abort.
+        #[cfg(target_os = "macos")]
+        let title = monitor_title(index, None);
+        #[cfg(not(target_os = "macos"))]
+        let title = monitor_title(index, monitor.name().ok());
         let width = monitor.width().unwrap_or(0);
         let height = monitor.height().unwrap_or(0);
-        let title = if name.is_empty() {
-            format!("Screen {}", index + 1)
-        } else {
-            format!("Screen {} ({name})", index + 1)
-        };
         out.push(CaptureSource {
             id,
             kind: SourceKind::Screen,
@@ -144,6 +215,30 @@ fn native_sources() -> Result<Vec<CaptureSource>, String> {
     }
 
     Ok(out)
+}
+
+#[cfg(target_os = "macos")]
+fn native_sources() -> Result<Vec<CaptureSource>, String> {
+    crate::macos_capture::list_sources()
+}
+
+#[cfg(all(test, not(target_os = "macos")))]
+mod screen_title_tests {
+    use super::monitor_title;
+
+    #[test]
+    fn monitor_title_uses_a_fallback_when_native_name_is_missing() {
+        assert_eq!(monitor_title(0, None), "Screen 1");
+        assert_eq!(monitor_title(2, Some("  ".to_owned())), "Screen 3");
+    }
+
+    #[test]
+    fn monitor_title_includes_a_nonempty_native_name() {
+        assert_eq!(
+            monitor_title(1, Some("Built-in Retina".to_owned())),
+            "Screen 2 (Built-in Retina)"
+        );
+    }
 }
 
 /// Physical-pixel rectangle `(x, y, w, h)` of a capture source on the
@@ -390,8 +485,23 @@ pub(crate) enum RecorderFrame {
 }
 
 impl ScreenRecorder {
+    /// macOS: avoid XCap's deprecated AVCaptureScreenInput recorder.
+    ///
+    /// Apple recommends ScreenCaptureKit for screen recording starting with
+    /// macOS 12.3. XCap 0.6.2 still implements its recorder through
+    /// AVCaptureScreenInput/AVCaptureSession; use the CoreGraphics polling
+    /// fallback until a native ScreenCaptureKit backend is available.
+    #[cfg(target_os = "macos")]
+    pub(crate) fn start(_monitor_id: u32) -> Option<Self> {
+        tracing::info!(
+            "screenshare: XCap AVCaptureScreenInput is disabled on macOS; using CoreGraphics polling"
+        );
+        None
+    }
+
     /// Start recording the given monitor; `None` (with a log) on any failure
     /// so the caller falls back to per-frame polling.
+    #[cfg(not(target_os = "macos"))]
     pub(crate) fn start(monitor_id: u32) -> Option<Self> {
         let monitor = Monitor::all()
             .ok()?
@@ -432,6 +542,18 @@ impl ScreenRecorder {
         if let Err(e) = self.recorder.stop() {
             tracing::debug!("screenshare: recorder stop: {e}");
         }
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod macos_recorder_tests {
+    use super::ScreenRecorder;
+
+    #[test]
+    fn deprecated_avfoundation_screen_recorder_is_disabled() {
+        // The macOS pipeline must use CoreGraphics polling until ScreenCaptureKit
+        // replaces XCap 0.6.2's AVCaptureScreenInput implementation.
+        assert!(ScreenRecorder::start(0).is_none());
     }
 }
 

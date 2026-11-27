@@ -81,6 +81,14 @@ cros-codecs = { version = "0.0.6", features = ["vaapi"], optional = true }
 # the binary must start on machines without an NVIDIA driver).
 libloading = { version = "0.8", optional = true }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+# Native macOS capture: ScreenCaptureKit 11 and VideoToolbox 0.21 share the
+# apple-cf 0.11 ownership wrappers, allowing IOSurface frames to go straight
+# into the hardware H.264 encoder without copying pixels through CPU memory.
+apple-cf = { version = "=0.11.7", default-features = false, features = ["cm", "iosurface", "cv"] }
+screencapturekit = { version = "=11.1.2", features = ["macos_13_0"] }
+videotoolbox = "=0.21.2"
+
 [target.'cfg(windows)'.dependencies]
 # Direct dependency (besides the `windows` umbrella) so the `#[interface]`
 # macro's generated `windows_core::` paths resolve for the hand-declared

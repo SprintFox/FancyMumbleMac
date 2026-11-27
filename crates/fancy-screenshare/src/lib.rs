@@ -36,6 +36,8 @@ mod gpu_windows;
 mod gpu_windows_d3d12;
 #[cfg(all(target_os = "linux", feature = "gpu"))]
 mod linux;
+#[cfg(target_os = "macos")]
+mod macos_capture;
 mod pipeline;
 pub mod sources;
 /// Native SFU stream viewer: required on Linux (distro WebKitGTK has no
@@ -49,6 +51,13 @@ pub use congestion::CongestionSnapshot;
 #[cfg(all(target_os = "linux", feature = "portal-probe"))]
 pub use linux::portal_probe_main;
 pub use sources::{CaptureSource, SourceKind};
+
+/// Request macOS camera authorization through Nokhwa's AVFoundation backend.
+/// This must complete before `sources::list_sources_with_devices(true)`.
+#[cfg(target_os = "macos")]
+pub async fn request_camera_access() -> Result<bool, String> {
+    crate::camera::request_access().await
+}
 
 /// GNOME-native share flow: [`linux::native_portal_picker`] tells embedders
 /// to hide the in-app source picker (the compositor's portal dialog picks),

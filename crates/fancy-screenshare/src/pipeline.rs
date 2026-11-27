@@ -101,6 +101,12 @@ pub(crate) fn create_pipeline(
             .map(|p| Box::new(p) as Box<dyn EncodePipeline>);
     }
 
+    #[cfg(target_os = "macos")]
+    {
+        return crate::macos_capture::MacCapturePipeline::new(kind, source_id, settings)
+            .map(|pipeline| Box::new(pipeline) as Box<dyn EncodePipeline>);
+    }
+
     #[cfg(all(windows, feature = "gpu"))]
     if kind == SourceKind::Screen {
         // Tier 1: the D3D12-native pipeline (Windows 11 video encode API -
@@ -480,6 +486,34 @@ impl FrameScaler {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Manual macOS smoke test for the production xcap -> scaler -> H.264 path.
+    ///
+    /// Run on an interactive Mac after granting Screen Recording permission:
+    /// `cargo test -p fancy-screenshare --lib manual_macos_screen_capture_encodes_an_idr -- --ignored --nocapture`
+    #[cfg(target_os = "macos")]
+    #[test]
+    #[ignore = "requires an interactive macOS session with Screen Recording permission"]
+    fn manual_macos_screen_capture_encodes_an_idr() {
+        let monitors = xcap::Monitor::all().expect("enumerate macOS displays");
+        let monitor = monitors.first().expect("at least one active display");
+        let id = monitor.id().expect("read display id");
+
+        let mut pipeline = create_pipeline(SourceKind::Screen, id, EncodeSettings::default())
+            .expect("construct the macOS screen pipeline");
+
+        let frame = pipeline
+            .next_frame(Duration::from_secs(2), true)
+            .expect("capture and encode the first screen frame")
+            .expect("the first capture must produce a frame");
+
+        assert!(frame.keyframe, "first emitted frame must be an H.264 IDR");
+        assert!(
+            !frame.data.is_empty(),
+            "encoded H.264 access unit must not be empty"
+        );
+        pipeline.shutdown();
+    }
 
     /// Manual diagnostic for screen-share delivery stalls: run the REAL
     /// pipeline selection (`create_pipeline`, GPU tier first) against the
