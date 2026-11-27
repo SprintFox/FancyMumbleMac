@@ -91,6 +91,13 @@ pub fn list_sources_with_devices(include_devices: bool) -> Result<Vec<CaptureSou
     })
 }
 
+fn monitor_title(index: usize, name: Option<String>) -> String {
+    match name.as_deref().map(str::trim).filter(|name| !name.is_empty()) {
+        Some(name) => format!("Screen {} ({name})", index + 1),
+        None => format!("Screen {}", index + 1),
+    }
+}
+
 fn native_sources() -> Result<Vec<CaptureSource>, String> {
     let mut out = Vec::new();
 
@@ -106,16 +113,9 @@ fn native_sources() -> Result<Vec<CaptureSource>, String> {
         // A friendly name is cosmetic; avoid crossing that thread boundary
         // rather than risking an AppKit assertion / process abort.
         #[cfg(target_os = "macos")]
-        let title = format!("Screen {}", index + 1);
+        let title = monitor_title(index, None);
         #[cfg(not(target_os = "macos"))]
-        let title = {
-            let name = monitor.name().unwrap_or_default();
-            if name.is_empty() {
-                format!("Screen {}", index + 1)
-            } else {
-                format!("Screen {} ({name})", index + 1)
-            }
-        };
+        let title = monitor_title(index, monitor.name().ok());
         let width = monitor.width().unwrap_or(0);
         let height = monitor.height().unwrap_or(0);
         out.push(CaptureSource {
@@ -172,10 +172,17 @@ fn native_sources() -> Result<Vec<CaptureSource>, String> {
 
 #[cfg(test)]
 mod screen_title_tests {
+    use super::monitor_title;
+
     #[test]
-    fn monitor_title_has_a_stable_fallback_without_a_native_name() {
-        assert_eq!(format!("Screen {}", 1), "Screen 1");
-        assert_eq!(format!("Screen {}", 3), "Screen 3");
+    fn monitor_title_uses_a_fallback_when_native_name_is_missing() {
+        assert_eq!(monitor_title(0, None), "Screen 1");
+        assert_eq!(monitor_title(2, Some("  ".to_owned())), "Screen 3");
+    }
+
+    #[test]
+    fn monitor_title_includes_a_nonempty_native_name() {
+        assert_eq!(monitor_title(1, Some("Built-in Retina".to_owned())), "Screen 2 (Built-in Retina)");
     }
 }
 
