@@ -108,7 +108,9 @@ pub(crate) fn list_devices() -> Vec<CaptureSource> {
     // touch TCC/AVFoundation when the user only opens the screen picker.
     #[cfg(target_os = "macos")]
     if !AVFOUNDATION_INITIALIZED.load(std::sync::atomic::Ordering::Acquire) {
-        tracing::debug!("screenshare: camera enumeration deferred until AVFoundation is initialized");
+        tracing::debug!(
+            "screenshare: camera enumeration deferred until AVFoundation is initialized"
+        );
         return Vec::new();
     }
 
