@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>NSCameraUsageDescription</key>
-    <string>Fancy Mumble uses the camera when you enable camera video in a call.</string>
+    <string>Fancy Mumble uses the camera when you share camera video or enable camera video in a call.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Fancy Mumble uses the microphone to transmit your voice in voice calls.</string>
 </dict>
