@@ -3,7 +3,6 @@
 use base64::Engine as _;
 use image::RgbaImage;
 use serde::{Deserialize, Serialize};
-#[cfg(not(target_os = "macos"))]
 use xcap::{Monitor, Window};
 
 /// What kind of thing a [`CaptureSource`] is.
