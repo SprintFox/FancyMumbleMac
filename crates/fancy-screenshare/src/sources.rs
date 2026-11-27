@@ -3,6 +3,7 @@
 use base64::Engine as _;
 use image::RgbaImage;
 use serde::{Deserialize, Serialize};
+#[cfg(not(target_os = "macos"))]
 use xcap::{Monitor, Window};
 
 /// What kind of thing a [`CaptureSource`] is.
@@ -125,6 +126,7 @@ pub fn request_screen_capture_access() -> bool {
     screen_recording_permission::request_access()
 }
 
+#[cfg(not(target_os = "macos"))]
 fn monitor_title(index: usize, name: Option<String>) -> String {
     match name.as_deref().map(str::trim).filter(|name| !name.is_empty()) {
         Some(name) => format!("Screen {} ({name})", index + 1),
@@ -132,6 +134,7 @@ fn monitor_title(index: usize, name: Option<String>) -> String {
     }
 }
 
+#[cfg(not(target_os = "macos"))]
 fn native_sources() -> Result<Vec<CaptureSource>, String> {
     let mut out = Vec::new();
 
@@ -204,7 +207,12 @@ fn native_sources() -> Result<Vec<CaptureSource>, String> {
     Ok(out)
 }
 
-#[cfg(test)]
+#[cfg(target_os = "macos")]
+fn native_sources() -> Result<Vec<CaptureSource>, String> {
+    crate::macos_capture::list_sources()
+}
+
+#[cfg(all(test, not(target_os = "macos")))]
 mod screen_title_tests {
     use super::monitor_title;
 
