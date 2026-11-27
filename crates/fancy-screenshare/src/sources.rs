@@ -430,8 +430,23 @@ pub(crate) enum RecorderFrame {
 }
 
 impl ScreenRecorder {
+    /// macOS: avoid XCap's deprecated AVCaptureScreenInput recorder.
+    ///
+    /// Apple recommends ScreenCaptureKit for screen recording starting with
+    /// macOS 12.3. XCap 0.6.2 still implements its recorder through
+    /// AVCaptureScreenInput/AVCaptureSession; use the CoreGraphics polling
+    /// fallback until a native ScreenCaptureKit backend is available.
+    #[cfg(target_os = "macos")]
+    pub(crate) fn start(_monitor_id: u32) -> Option<Self> {
+        tracing::info!(
+            "screenshare: XCap AVCaptureScreenInput is disabled on macOS; using CoreGraphics polling"
+        );
+        None
+    }
+
     /// Start recording the given monitor; `None` (with a log) on any failure
     /// so the caller falls back to per-frame polling.
+    #[cfg(not(target_os = "macos"))]
     pub(crate) fn start(monitor_id: u32) -> Option<Self> {
         let monitor = Monitor::all()
             .ok()?
@@ -472,6 +487,18 @@ impl ScreenRecorder {
         if let Err(e) = self.recorder.stop() {
             tracing::debug!("screenshare: recorder stop: {e}");
         }
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod macos_recorder_tests {
+    use super::ScreenRecorder;
+
+    #[test]
+    fn deprecated_avfoundation_screen_recorder_is_disabled() {
+        // The macOS pipeline must use CoreGraphics polling until ScreenCaptureKit
+        // replaces XCap 0.6.2's AVCaptureScreenInput implementation.
+        assert!(ScreenRecorder::start(0).is_none());
     }
 }
 
