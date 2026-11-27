@@ -93,6 +93,7 @@ pub fn list_sources_with_devices(include_devices: bool) -> Result<Vec<CaptureSou
 
 #[cfg(target_os = "macos")]
 #[link(name = "CoreGraphics", kind = "framework")]
+#[allow(non_snake_case)]
 unsafe extern "C" {
     fn CGPreflightScreenCaptureAccess() -> bool;
     fn CGRequestScreenCaptureAccess() -> bool;
