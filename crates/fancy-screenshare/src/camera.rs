@@ -96,6 +96,15 @@ fn backends() -> Vec<Box<dyn CameraBackend>> {
 /// machine with no cameras (or camera privacy switched on) simply yields an
 /// empty list and must not break screen/window listing.
 pub(crate) fn list_devices() -> Vec<CaptureSource> {
+    // Nokhwa's AVFoundation backend explicitly requires
+    // `nokhwa_initialize` before even querying cameras. Do not implicitly
+    // touch TCC/AVFoundation when the user only opens the screen picker.
+    #[cfg(target_os = "macos")]
+    if !nokhwa::nokhwa_check() {
+        tracing::debug!("screenshare: camera enumeration deferred until camera access is granted");
+        return Vec::new();
+    }
+
     let mut seen = std::collections::HashSet::new();
     let mut out = Vec::new();
     for backend in backends() {
@@ -106,6 +115,28 @@ pub(crate) fn list_devices() -> Vec<CaptureSource> {
         }
     }
     out
+}
+
+/// Request and initialize AVFoundation access on macOS. The callback is
+/// asynchronous because macOS presents its own camera-consent prompt.
+#[cfg(target_os = "macos")]
+pub(crate) async fn request_access() -> Result<bool, String> {
+    if nokhwa::nokhwa_check() {
+        return Ok(true);
+    }
+
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let tx = std::sync::Arc::new(std::sync::Mutex::new(Some(tx)));
+    nokhwa::nokhwa_initialize(move |granted| {
+        if let Ok(mut slot) = tx.lock() {
+            if let Some(tx) = slot.take() {
+                let _ = tx.send(granted);
+            }
+        }
+    });
+
+    rx.await
+        .map_err(|_| "macOS camera permission request ended without a result".to_owned())
 }
 
 /// Open the device `id` through whichever backend owns its id-space. When
