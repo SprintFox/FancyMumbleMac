@@ -36,9 +36,9 @@ mod gpu_windows;
 mod gpu_windows_d3d12;
 #[cfg(all(target_os = "linux", feature = "gpu"))]
 mod linux;
-mod pipeline;
 #[cfg(target_os = "macos")]
 mod macos_capture;
+mod pipeline;
 pub mod sources;
 /// Native SFU stream viewer: required on Linux (distro WebKitGTK has no
 /// WebRTC), selectable on Windows (an advanced setting switches the webview
