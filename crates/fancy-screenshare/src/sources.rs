@@ -91,6 +91,27 @@ pub fn list_sources_with_devices(include_devices: bool) -> Result<Vec<CaptureSou
     })
 }
 
+/// Request macOS Screen Recording permission using the documented CoreGraphics TCC API.
+#[cfg(target_os = "macos")]
+pub fn request_screen_capture_access() -> bool {
+    #[link(name = "CoreGraphics", kind = "framework")]
+    unsafe extern "C" {
+        fn CGPreflightScreenCaptureAccess() -> bool;
+        fn CGRequestScreenCaptureAccess() -> bool;
+    }
+
+    // Avoid showing a system prompt if access was already granted.
+    unsafe {
+        if CGPreflightScreenCaptureAccess() {
+            return true;
+        }
+        let _requested = CGRequestScreenCaptureAccess();
+        // Re-check: some macOS releases require the application to be
+        // relaunched after the user grants screen recording permission.
+        CGPreflightScreenCaptureAccess()
+    }
+}
+
 fn monitor_title(index: usize, name: Option<String>) -> String {
     match name.as_deref().map(str::trim).filter(|name| !name.is_empty()) {
         Some(name) => format!("Screen {} ({name})", index + 1),
