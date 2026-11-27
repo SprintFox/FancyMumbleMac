@@ -7,14 +7,13 @@
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
-use apple_cf::cm::CMTime;
 use apple_cf::iosurface::IOSurface;
-use screencapturekit::cm::{CMSampleBuffer, CMSampleBufferExt};
-use screencapturekit::prelude::*;
-use screencapturekit::shareable_content::SCShareableContent;
+use screencapturekit::prelude::{
+    CMSampleBuffer, CMSampleBufferExt, CMTime, PixelFormat, SCContentFilter, SCShareableContent,
+    SCStream, SCStreamConfiguration,
+};
 use screencapturekit::stream::output_trait::SCStreamOutputTrait;
 use screencapturekit::stream::output_type::SCStreamOutputType;
-use screencapturekit::stream::SCStream;
 use videotoolbox::compression::{CompressionSession, FrameProperties, HardwareAcceleration, ProfileLevel};
 use videotoolbox::session::Codec;
 
@@ -28,7 +27,7 @@ pub(crate) fn list_sources() -> Result<Vec<CaptureSource>, String> {
     let content = SCShareableContent::get().map_err(|e| format!("ScreenCaptureKit shareable content: {e}"))?;
     let mut sources = Vec::new();
 
-    for display in content.displays() {
+    for (index, display) in content.displays().into_iter().enumerate() {
         let (width, height) = (display.width(), display.height());
         if width == 0 || height == 0 {
             continue;
@@ -36,7 +35,7 @@ pub(crate) fn list_sources() -> Result<Vec<CaptureSource>, String> {
         sources.push(CaptureSource {
             id: display.display_id(),
             kind: SourceKind::Screen,
-            title: format!("Screen {} ({}x{})", sources.iter().filter(|s: &&CaptureSource| s.kind == SourceKind::Screen).count() + 1, width, height),
+            title: format!("Screen {} ({}x{})", index + 1, width, height),
             width,
             height,
         });
