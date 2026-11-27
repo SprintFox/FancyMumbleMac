@@ -36,6 +36,7 @@ const CAMERA = {
 beforeEach(() => {
   invoke.mockReset();
   invoke.mockImplementation(async (command: string, args?: { includeDevices?: boolean }) => {
+    if (command === "request_screen_capture_access") return true;
     if (command === "list_capture_sources") {
       return args?.includeDevices ? [SCREEN, CAMERA] : [SCREEN];
     }
@@ -50,18 +51,38 @@ afterEach(() => {
 });
 
 describe("ScreenSharePickerDialog camera access boundary", () => {
-  it("lists screens without touching AVFoundation when the picker opens", async () => {
+  it("requests screen permission before listing screens and does not touch AVFoundation", async () => {
     render(<ScreenSharePickerDialog onConfirm={vi.fn()} onCancel={vi.fn()} />);
 
     await waitFor(() => {
       expect(invoke).toHaveBeenCalledWith("list_capture_sources");
     });
+    const calls = invoke.mock.calls.map(([command]) => command);
+    expect(calls.indexOf("request_screen_capture_access")).toBeGreaterThanOrEqual(0);
+    expect(calls.indexOf("list_capture_sources")).toBeGreaterThan(
+      calls.indexOf("request_screen_capture_access"),
+    );
     expect(invoke).not.toHaveBeenCalledWith("request_camera_access");
     expect(
       invoke.mock.calls.some(
         ([command, args]) => command === "list_capture_sources" && args?.includeDevices === true,
       ),
     ).toBe(false);
+  });
+
+  it("does not enumerate displays when macOS screen permission is denied", async () => {
+    invoke.mockImplementation(async (command: string) => {
+      if (command === "request_screen_capture_access") return false;
+      if (command === "capture_source_thumbnail") throw new Error("should not capture");
+      throw new Error(`unexpected Tauri command after denied permission: ${command}`);
+    });
+
+    render(<ScreenSharePickerDialog onConfirm={vi.fn()} onCancel={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Screen Recording permission is required/)).toBeTruthy();
+    });
+    expect(invoke).not.toHaveBeenCalledWith("list_capture_sources");
   });
 
   it("requests camera access before asking the native layer to enumerate devices", async () => {
