@@ -3,9 +3,8 @@
 //! Sits beside the video capture threads: one thread pulls interleaved
 //! stereo blocks from the platform capture, cuts them into 20 ms Opus
 //! frames and writes each as a sample on the broadcaster's audio track.
-//! Linux captures the default sink's monitor over PipeWire; other platforms
-//! report that desktop audio is not available yet, and the share goes on
-//! without it.
+//! Linux captures the default sink over PipeWire; macOS captures system audio
+//! from ScreenCaptureKit; unsupported platforms share video without audio.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -41,7 +40,16 @@ fn start_capture(tx: SyncSender<Vec<f32>>) -> Result<Box<dyn CaptureHandle>, Str
         .map(|c| Box::new(c) as Box<dyn CaptureHandle>)
 }
 
-#[cfg(not(all(target_os = "linux", feature = "gpu")))]
+#[cfg(target_os = "macos")]
+impl CaptureHandle for crate::macos_capture::MacDesktopAudioCapture {}
+
+#[cfg(target_os = "macos")]
+fn start_capture(tx: SyncSender<Vec<f32>>) -> Result<Box<dyn CaptureHandle>, String> {
+    crate::macos_capture::start_desktop_audio(tx)
+        .map(|capture| Box::new(capture) as Box<dyn CaptureHandle>)
+}
+
+#[cfg(not(any(all(target_os = "linux", feature = "gpu"), target_os = "macos")))]
 fn start_capture(_tx: SyncSender<Vec<f32>>) -> Result<Box<dyn CaptureHandle>, String> {
     Err("desktop audio capture is not available on this platform yet".to_owned())
 }
@@ -67,7 +75,7 @@ pub(crate) fn spawn_audio_thread(
     std::thread::Builder::new()
         .name("screenshare-audio".into())
         .spawn(move || {
-            let _capture = capture; // ends the PipeWire stream when the thread does
+            let _capture = capture; // ends the platform capture stream when the thread does
             encode_loop(&rx, &mut encoder, &track, &rt, &stop);
         })
         .map_err(|e| format!("audio thread spawn: {e}"))
