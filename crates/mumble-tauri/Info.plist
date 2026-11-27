@@ -4,6 +4,8 @@
 <dict>
     <key>NSScreenCaptureUsageDescription</key>
     <string>Fancy Mumble captures your selected screen or application window when you start a screen share.</string>
+    <key>NSAudioCaptureUsageDescription</key>
+    <string>Fancy Mumble captures the audio playing on your Mac when you enable system audio in a screen share.</string>
     <key>NSCameraUsageDescription</key>
     <string>Fancy Mumble uses the camera when you share camera video or enable camera video in a call.</string>
     <key>NSMicrophoneUsageDescription</key>
