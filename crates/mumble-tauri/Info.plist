@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <key>NSScreenCaptureUsageDescription</key>
+    <string>Fancy Mumble captures your selected screen or application window when you start a screen share.</string>
     <key>NSCameraUsageDescription</key>
     <string>Fancy Mumble uses the camera when you share camera video or enable camera video in a call.</string>
     <key>NSMicrophoneUsageDescription</key>
