@@ -47,6 +47,16 @@ pub struct CaptureSource {
 /// portal dialog chooses the concrete source. Cameras enumerate normally
 /// there (V4L2 needs no portal).
 pub fn list_sources() -> Result<Vec<CaptureSource>, String> {
+    list_sources_with_devices(true)
+}
+
+/// Enumerate desktop sources and optionally cameras.
+///
+/// macOS camera enumeration is intentionally opt-in: AVFoundation requires
+/// explicit initialization before *any* query. The source picker initially
+/// asks for displays/windows only and calls this with `include_devices = true`
+/// only after the user opens the camera tab and grants access.
+pub fn list_sources_with_devices(include_devices: bool) -> Result<Vec<CaptureSource>, String> {
     let native = native_sources();
 
     #[cfg(all(target_os = "linux", feature = "gpu"))]
@@ -67,12 +77,16 @@ pub fn list_sources() -> Result<Vec<CaptureSource>, String> {
                 height: 0,
             },
         ];
-        out.extend(crate::camera::list_devices());
+        if include_devices {
+            out.extend(crate::camera::list_devices());
+        }
         return Ok(out);
     }
 
     native.map(|mut list| {
-        list.extend(crate::camera::list_devices());
+        if include_devices {
+            list.extend(crate::camera::list_devices());
+        }
         list
     })
 }
@@ -86,14 +100,24 @@ fn native_sources() -> Result<Vec<CaptureSource>, String> {
         .enumerate()
     {
         let Ok(id) = monitor.id() else { continue };
-        let name = monitor.name().unwrap_or_default();
+        // XCap 0.6.2 resolves a monitor name through AppKit's
+        // NSScreen::screens using MainThreadMarker::new_unchecked. This
+        // command runs on Tauri's blocking pool, not the AppKit main thread.
+        // A friendly name is cosmetic; avoid crossing that thread boundary
+        // rather than risking an AppKit assertion / process abort.
+        #[cfg(target_os = "macos")]
+        let title = format!("Screen {}", index + 1);
+        #[cfg(not(target_os = "macos"))]
+        let title = {
+            let name = monitor.name().unwrap_or_default();
+            if name.is_empty() {
+                format!("Screen {}", index + 1)
+            } else {
+                format!("Screen {} ({name})", index + 1)
+            }
+        };
         let width = monitor.width().unwrap_or(0);
         let height = monitor.height().unwrap_or(0);
-        let title = if name.is_empty() {
-            format!("Screen {}", index + 1)
-        } else {
-            format!("Screen {} ({name})", index + 1)
-        };
         out.push(CaptureSource {
             id,
             kind: SourceKind::Screen,
@@ -144,6 +168,15 @@ fn native_sources() -> Result<Vec<CaptureSource>, String> {
     }
 
     Ok(out)
+}
+
+#[cfg(test)]
+mod screen_title_tests {
+    #[test]
+    fn monitor_title_has_a_stable_fallback_without_a_native_name() {
+        assert_eq!(format!("Screen {}", 1), "Screen 1");
+        assert_eq!(format!("Screen {}", 3), "Screen 3");
+    }
 }
 
 /// Physical-pixel rectangle `(x, y, w, h)` of a capture source on the
