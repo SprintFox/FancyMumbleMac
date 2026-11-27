@@ -122,7 +122,14 @@ mod screen_recording_permission {
 /// Request macOS Screen Recording permission using the documented CoreGraphics TCC API.
 #[cfg(target_os = "macos")]
 pub fn request_screen_capture_access() -> bool {
-    screen_recording_permission::request_access()
+    if !screen_recording_permission::request_access() {
+        return false;
+    }
+
+    // Ask ScreenCaptureKit itself to resolve shareable content too. This
+    // surfaces TCC errors from the framework before the picker starts
+    // requesting thumbnails and before any capture stream is constructed.
+    crate::macos_capture::list_sources().is_ok()
 }
 
 #[cfg(not(target_os = "macos"))]
