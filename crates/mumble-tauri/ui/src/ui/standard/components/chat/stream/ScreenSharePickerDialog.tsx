@@ -142,11 +142,10 @@ export default function ScreenSharePickerDialog({
     // enumeration until the user explicitly selects the Devices tab.
     const includeDevices =
       deviceOnly || (initialSelection ?? []).some((source) => source.kind === "device");
-    invoke<CaptureSource[]>(
-      "list_capture_sources",
-      includeDevices ? { includeDevices: true } : undefined,
-    )
-      .then((list) => {
+    const sourceRequest = includeDevices
+      ? invoke<CaptureSource[]>("list_capture_sources", { includeDevices: true })
+      : invoke<CaptureSource[]>("list_capture_sources");
+    sourceRequest.then((list) => {
         if (cancelled) return;
         // Camera-only mode never shows (or thumbnails) screens/windows.
         const usable = deviceOnly ? list.filter((s) => s.kind === "device") : list;
