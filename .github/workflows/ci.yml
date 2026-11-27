@@ -112,7 +112,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        # macOS is a first-class target: native AppKit/AVFoundation code must
+        # compile and its platform-gated regression tests must actually run.
+        os: [ubuntu-latest, windows-latest, macos-latest]
     env:
       # Clippy and the unit tests compile mumble-tauri, whose build.rs would
       # otherwise probe for the Qt MinGW kit to build the minimal client and,
@@ -166,6 +168,10 @@ jobs:
             libjavascriptcoregtk-4.1-dev protobuf-compiler libpipewire-0.3-dev \
             libva-dev libdrm-dev libgbm-dev
 
+      - name: Install protobuf compiler (macOS)
+        if: runner.os == 'macOS'
+        run: brew install protobuf
+
       - name: Install protoc (Windows)
         if: runner.os == 'Windows'
         uses: arduino/setup-protoc@v3
@@ -201,6 +207,9 @@ jobs:
 
       - name: Rust unit tests (fancy-utils)
         run: cargo test --package fancy-utils --lib
+
+      - name: Rust unit tests (fancy-screenshare)
+        run: cargo test --package fancy-screenshare --lib
 
       - name: Rust unit tests (mumble-tauri)
         run: cargo test --package mumble-tauri --lib
