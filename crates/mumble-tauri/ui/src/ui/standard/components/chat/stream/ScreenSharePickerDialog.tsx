@@ -136,53 +136,65 @@ export default function ScreenSharePickerDialog({
 
   useEffect(() => {
     let cancelled = false;
-    // A device-only picker is opened only after request_camera_access has
-    // completed in useScreenShare. Preserve cameras already in an active
-    // broadcast when opening the regular picker; otherwise defer AVFoundation
-    // enumeration until the user explicitly selects the Devices tab.
-    const includeDevices =
-      deviceOnly || (initialSelection ?? []).some((source) => source.kind === "device");
-    const sourceRequest = includeDevices
-      ? invoke<CaptureSource[]>("list_capture_sources", { includeDevices: true })
-      : invoke<CaptureSource[]>("list_capture_sources");
-    sourceRequest.then((list) => {
+    void (async () => {
+      // A device-only picker is opened only after request_camera_access has
+      // completed in useScreenShare. A normal display picker must first pass
+      // macOS Screen Recording TCC; never enumerate/capture sources blindly.
+      if (!deviceOnly) {
+        const granted = await invoke<boolean>("request_screen_capture_access");
         if (cancelled) return;
-        // Camera-only mode never shows (or thumbnails) screens/windows.
-        const usable = deviceOnly ? list.filter((s) => s.kind === "device") : list;
-        setSources(usable);
-        // Seed the selection from the active broadcast (once, on load):
-        // match each seeded source against the fresh list so vanished
-        // sources are silently dropped rather than re-shared blind.
-        for (const seed of initialSelection ?? []) {
-          if (deviceOnly && seed.kind !== "device") {
-            // Portal-picked display source: its advisory id is not in the
-            // list, but it must survive the confirm so adding a camera keeps
-            // the live screen track. Represent it as a synthetic card-less
-            // selection (chip only).
-            setSelectedDisplay(
-              (prev) =>
-                prev ?? {
-                  id: seed.id,
-                  kind: seed.kind,
-                  title: t("screenShare.picker.systemPickedDisplay"),
-                  width: 0,
-                  height: 0,
-                },
-            );
-            continue;
-          }
-          const live = usable.find((s) => s.kind === seed.kind && s.id === seed.id);
-          if (!live) continue;
-          if (live.kind === "device") {
-            setSelectedDevice((prev) => prev ?? live);
-          } else {
-            setSelectedDisplay((prev) => prev ?? live);
-          }
+        if (!granted) {
+          setLoadError(
+            "Screen Recording permission is required. Enable Fancy Mumble in System Settings > Privacy & Security > Screen & System Audio Recording, then quit and reopen the app.",
+          );
+          return;
         }
-      })
-      .catch((e) => {
-        if (!cancelled) setLoadError(e instanceof Error ? e.message : String(e));
-      });
+      }
+
+      // Preserve cameras already in an active broadcast; otherwise defer
+      // AVFoundation enumeration until the user explicitly selects Devices.
+      const includeDevices =
+        deviceOnly || (initialSelection ?? []).some((source) => source.kind === "device");
+      const list = includeDevices
+        ? await invoke<CaptureSource[]>("list_capture_sources", { includeDevices: true })
+        : await invoke<CaptureSource[]>("list_capture_sources");
+      if (cancelled) return;
+
+      // Camera-only mode never shows (or thumbnails) screens/windows.
+      const usable = deviceOnly ? list.filter((s) => s.kind === "device") : list;
+      setSources(usable);
+      // Seed the selection from the active broadcast (once, on load):
+      // match each seeded source against the fresh list so vanished
+      // sources are silently dropped rather than re-shared blind.
+      for (const seed of initialSelection ?? []) {
+        if (deviceOnly && seed.kind !== "device") {
+          // Portal-picked display source: its advisory id is not in the
+          // list, but it must survive the confirm so adding a camera keeps
+          // the live screen track. Represent it as a synthetic card-less
+          // selection (chip only).
+          setSelectedDisplay(
+            (prev) =>
+              prev ?? {
+                id: seed.id,
+                kind: seed.kind,
+                title: t("screenShare.picker.systemPickedDisplay"),
+                width: 0,
+                height: 0,
+              },
+          );
+          continue;
+        }
+        const live = usable.find((s) => s.kind === seed.kind && s.id === seed.id);
+        if (!live) continue;
+        if (live.kind === "device") {
+          setSelectedDevice((prev) => prev ?? live);
+        } else {
+          setSelectedDisplay((prev) => prev ?? live);
+        }
+      }
+    })().catch((e) => {
+      if (!cancelled) setLoadError(e instanceof Error ? e.message : String(e));
+    });
     return () => {
       cancelled = true;
     };
