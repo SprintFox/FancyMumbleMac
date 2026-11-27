@@ -37,6 +37,13 @@ use crate::encode::{EncodeSettings, EncodedFrame, H264Encoder, VideoEncoder};
 use crate::pipeline::{EncodePipeline, FrameScaler, MAX_CAPTURE_FAILURES, StageTimings};
 use crate::sources::{CaptureSource, SourceKind};
 
+#[cfg(target_os = "macos")]
+static AVFOUNDATION_INITIALIZED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+#[cfg(target_os = "macos")]
+static AVFOUNDATION_INIT_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 /// A live webcam frame source: opened once on the capture thread (the OS
 /// objects are thread-affine), then polled for RGBA frames. Backends implement
 /// this per capture API - Media Foundation via nokhwa for real cameras,
@@ -100,8 +107,8 @@ pub(crate) fn list_devices() -> Vec<CaptureSource> {
     // `nokhwa_initialize` before even querying cameras. Do not implicitly
     // touch TCC/AVFoundation when the user only opens the screen picker.
     #[cfg(target_os = "macos")]
-    if !nokhwa::nokhwa_check() {
-        tracing::debug!("screenshare: camera enumeration deferred until camera access is granted");
+    if !AVFOUNDATION_INITIALIZED.load(std::sync::atomic::Ordering::Acquire) {
+        tracing::debug!("screenshare: camera enumeration deferred until AVFoundation is initialized");
         return Vec::new();
     }
 
@@ -121,10 +128,14 @@ pub(crate) fn list_devices() -> Vec<CaptureSource> {
 /// asynchronous because macOS presents its own camera-consent prompt.
 #[cfg(target_os = "macos")]
 pub(crate) async fn request_access() -> Result<bool, String> {
-    if nokhwa::nokhwa_check() {
+    let _guard = AVFOUNDATION_INIT_LOCK.lock().await;
+    if AVFOUNDATION_INITIALIZED.load(std::sync::atomic::Ordering::Acquire) {
         return Ok(true);
     }
 
+    // Call initialize even when TCC already reports Authorized: Nokhwa's
+    // documentation requires initialization before *any* AVFoundation API,
+    // not merely before opening a capture stream.
     let (tx, rx) = tokio::sync::oneshot::channel();
     let tx = std::sync::Arc::new(std::sync::Mutex::new(Some(tx)));
     nokhwa::nokhwa_initialize(move |granted| {
@@ -135,8 +146,13 @@ pub(crate) async fn request_access() -> Result<bool, String> {
         }
     });
 
-    rx.await
-        .map_err(|_| "macOS camera permission request ended without a result".to_owned())
+    let granted = rx
+        .await
+        .map_err(|_| "macOS camera permission request ended without a result".to_owned())?;
+    if granted {
+        AVFOUNDATION_INITIALIZED.store(true, std::sync::atomic::Ordering::Release);
+    }
+    Ok(granted)
 }
 
 /// Open the device `id` through whichever backend owns its id-space. When
@@ -145,6 +161,11 @@ pub(crate) async fn request_access() -> Result<bool, String> {
 /// Foundation but only actually *open* through DirectShow, and dedup keeps
 /// the native entry - so the same physical device is retried by title.
 fn open_source(id: u32) -> Result<Box<dyn FrameSource>, String> {
+    #[cfg(target_os = "macos")]
+    if !AVFOUNDATION_INITIALIZED.load(std::sync::atomic::Ordering::Acquire) {
+        return Err("camera access must be initialized before opening AVFoundation".to_owned());
+    }
+
     let all = backends();
     let Some(owner) = all.iter().find(|b| b.owns(id)) else {
         return Err(format!("camera {id} not found"));
