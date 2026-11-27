@@ -273,6 +273,24 @@ pub(crate) async fn list_capture_sources(
     .map_err(|e| e.to_string())?
 }
 
+/// Request the OS screen-recording permission before enumerating or capturing displays.
+#[cfg(target_os = "macos")]
+#[tauri::command]
+pub(crate) async fn request_screen_capture_access() -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(
+        fancy_screenshare::sources::request_screen_capture_access,
+    )
+    .await
+    .map_err(|e| e.to_string())
+}
+
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+pub(crate) async fn request_screen_capture_access() -> Result<bool, String> {
+    // Other platforms use their native source picker / portal flow.
+    Ok(true)
+}
+
 /// Capture a JPEG thumbnail (data URL) of one source for its picker card.
 #[tauri::command]
 pub(crate) async fn capture_source_thumbnail(
