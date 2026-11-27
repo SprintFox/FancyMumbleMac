@@ -7,7 +7,7 @@
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
-use apple_cf::cm::{CMFormatDescription, CMTime};
+use apple_cf::cm::CMTime;
 use apple_cf::iosurface::IOSurface;
 use screencapturekit::cm::{CMSampleBuffer, CMSampleBufferExt};
 use screencapturekit::prelude::*;
@@ -311,7 +311,6 @@ impl EncodePipeline for MacCapturePipeline {
     ) -> Result<Option<EncodedFrame>, String> {
         if let Some(surface) = self.latest.take(wait) {
             self.last_surface = Some(surface);
-            self.first_frame = true;
         } else if !force_keyframe && !self.first_frame {
             return Ok(None);
         }
