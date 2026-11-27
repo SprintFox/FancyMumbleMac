@@ -58,7 +58,9 @@ fn sync_capture_exclusion(app: &AppHandle) {
         if let Err(error) = app.run_on_main_thread(move || {
             set_own_windows_excluded_from_capture(&app_for_main_thread, hide);
         }) {
-            tracing::warn!("screenshare: failed to schedule capture exclusion on the main thread: {error}");
+            tracing::warn!(
+                "screenshare: failed to schedule capture exclusion on the main thread: {error}"
+            );
         }
     }
 
@@ -277,11 +279,9 @@ pub(crate) async fn list_capture_sources(
 #[cfg(target_os = "macos")]
 #[tauri::command]
 pub(crate) async fn request_screen_capture_access() -> Result<bool, String> {
-    tauri::async_runtime::spawn_blocking(
-        fancy_screenshare::sources::request_screen_capture_access,
-    )
-    .await
-    .map_err(|e| e.to_string())
+    tauri::async_runtime::spawn_blocking(fancy_screenshare::sources::request_screen_capture_access)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[cfg(not(target_os = "macos"))]
