@@ -205,7 +205,7 @@ export default function ScreenSharePanel({
   const selectTab = async (kind: CaptureSourceKind) => {
     setTab(kind);
     setError(null);
-    if (kind !== "device" || cameraAccessReady || sources?.some((source) => source.kind === "device")) {
+    if (kind !== "device" || cameraAccessReady) {
       return;
     }
 
@@ -219,13 +219,15 @@ export default function ScreenSharePanel({
         return;
       }
       setCameraAccessReady(true);
-      const items = await invoke<CaptureSource[]>("list_capture_sources", {
-        includeDevices: true,
-      });
-      setSources((current) => [
-        ...(current ?? []).filter((source) => source.kind !== "device"),
-        ...items.filter((source) => source.kind === "device"),
-      ]);
+      if (!sources?.some((source) => source.kind === "device")) {
+        const items = await invoke<CaptureSource[]>("list_capture_sources", {
+          includeDevices: true,
+        });
+        setSources((current) => [
+          ...(current ?? []).filter((source) => source.kind !== "device"),
+          ...items.filter((source) => source.kind === "device"),
+        ]);
+      }
     } catch (reason) {
       setError(String(reason));
     } finally {
