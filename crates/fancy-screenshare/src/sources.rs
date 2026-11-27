@@ -134,7 +134,11 @@ pub fn request_screen_capture_access() -> bool {
 
 #[cfg(not(target_os = "macos"))]
 fn monitor_title(index: usize, name: Option<String>) -> String {
-    match name.as_deref().map(str::trim).filter(|name| !name.is_empty()) {
+    match name
+        .as_deref()
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+    {
         Some(name) => format!("Screen {} ({name})", index + 1),
         None => format!("Screen {}", index + 1),
     }
@@ -230,7 +234,10 @@ mod screen_title_tests {
 
     #[test]
     fn monitor_title_includes_a_nonempty_native_name() {
-        assert_eq!(monitor_title(1, Some("Built-in Retina".to_owned())), "Screen 2 (Built-in Retina)");
+        assert_eq!(
+            monitor_title(1, Some("Built-in Retina".to_owned())),
+            "Screen 2 (Built-in Retina)"
+        );
     }
 }
 
