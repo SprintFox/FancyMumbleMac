@@ -998,8 +998,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f079e83a288787bcd14a6aea84cee5c87a67c5a3e660c30f557a3d24761b3527"
 
 [[package]]
-
-[executed on device: sprintfox-host (7696a633-c8f2-4694-8da0-e939257c400f)]name = "chacha20"
+name = "chacha20"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3613f74bd2eac03dad61bd53dbe620703d4371614fe0bc3b9f04dd36fe4e818"
@@ -1999,8 +1998,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0aafbcdb8afc29c1a7ee5fbe53b5d62f4565b35a042a662ca9fecd0b54dae6f4"
 
 [[package]]
-
-[executed on device: sprintfox-host (7696a633-c8f2-4694-8da0-e939257c400f)]name = "drm-sys"
+name = "drm-sys"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fd39dde40b6e196c2e8763f23d119ddb1a8714534bf7d77fa97a65b0feda3986"
@@ -3000,8 +2998,7 @@ version = "0.18.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f29a1c21c59553eb7dd40e918be54dccd60c52b049b75119d5d96ce6b624414"
 dependencies = [
-
-[executed on device: sprintfox-host (7696a633-c8f2-4694-8da0-e939257c400f)] "atk-sys",
+ "atk-sys",
  "cairo-sys-rs",
  "gdk-pixbuf-sys",
  "gdk-sys",
@@ -4001,8 +3998,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ea8a46e4d016ef464e386e4970f5415fe0939c2d63abe0c2f539c05ef88c5fe5"
 dependencies = [
  "drm 0.15.0",
-
-[executed on device: sprintfox-host (7696a633-c8f2-4694-8da0-e939257c400f)] "gbm 0.18.0",
+ "gbm 0.18.0",
  "gl",
  "image",
  "khronos-egl",
@@ -5002,8 +4998,7 @@ version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13a380031deed8e99db00065c45937da434ca987c034e13b87e4441f9e4090be"
 dependencies = [
-
-[executed on device: sprintfox-host (7696a633-c8f2-4694-8da0-e939257c400f)] "objc2 0.6.5",
+ "objc2 0.6.5",
  "objc2-foundation 0.3.2",
 ]
 
@@ -6003,8 +5998,7 @@ dependencies = [
 name = "proc-macro-error"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-
-[executed on device: sprintfox-host (7696a633-c8f2-4694-8da0-e939257c400f)]checksum = "da25490ff9892aab3fcf7c36f08cfb902dd3e71ca0f9f9517bea02a73a5ce38c"
+checksum = "da25490ff9892aab3fcf7c36f08cfb902dd3e71ca0f9f9517bea02a73a5ce38c"
 dependencies = [
  "proc-macro-error-attr",
  "proc-macro2",
@@ -7004,8 +6998,7 @@ version = "3.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b7f4bc775c73d9a02cde8bf7b2ec4c9d12743edf609006c7facc23998404cd1d"
 dependencies = [
-
-[executed on device: sprintfox-host (7696a633-c8f2-4694-8da0-e939257c400f)] "bitflags 2.13.2",
+ "bitflags 2.13.2",
  "core-foundation 0.10.1",
  "core-foundation-sys 0.8.7",
  "libc",
@@ -8005,8 +7998,7 @@ dependencies = [
  "glob",
  "heck 0.5.0",
  "json-patch",
-
-[executed on device: sprintfox-host (7696a633-c8f2-4694-8da0-e939257c400f)] "schemars 0.8.22",
+ "schemars 0.8.22",
  "semver",
  "serde",
  "serde_json",
@@ -9006,8 +8998,7 @@ checksum = "8f20bdbfc9915686faa18fb5bbe8b4552778505defbf9f12289beefbc44092a6"
 
 [[package]]
 name = "uds_windows"
-
-[executed on device: sprintfox-host (7696a633-c8f2-4694-8da0-e939257c400f)]version = "1.2.1"
+version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2f6fb2847f6742cd76af783a2a2c49e9375d0a111c7bef6f71cd9e738c72d6e"
 dependencies = [
@@ -10007,8 +9998,7 @@ name = "windows-registry"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "02752bf7fbdcce7f2a27a742f798510f3e5ad88dbe84871e5168e2120c3d5720"
-
-[executed on device: sprintfox-host (7696a633-c8f2-4694-8da0-e939257c400f)]dependencies = [
+dependencies = [
  "windows-link 0.2.1",
  "windows-result 0.4.1",
  "windows-strings 0.5.1",
@@ -10946,5 +10936,3 @@ dependencies = [
  "syn 3.0.10",
  "winnow 1.0.5",
 ]
-
-[executed on device: sprintfox-host (7696a633-c8f2-4694-8da0-e939257c400f)]
