@@ -15,7 +15,9 @@ use screencapturekit::prelude::{
 };
 use screencapturekit::stream::output_trait::SCStreamOutputTrait;
 use screencapturekit::stream::output_type::SCStreamOutputType;
-use videotoolbox::compression::{CompressionSession, FrameProperties, HardwareAcceleration, ProfileLevel};
+use videotoolbox::compression::{
+    CompressionSession, FrameProperties, HardwareAcceleration, ProfileLevel,
+};
 use videotoolbox::session::Codec;
 
 use crate::encode::{EncodeSettings, EncodedFrame};
@@ -25,7 +27,8 @@ use crate::sources::{CaptureSource, SourceKind};
 /// Enumerate macOS capture sources from ScreenCaptureKit. The ids are native
 /// CG display/window ids, matching the ids accepted by the stream filters.
 pub(crate) fn list_sources() -> Result<Vec<CaptureSource>, String> {
-    let content = SCShareableContent::get().map_err(|e| format!("ScreenCaptureKit shareable content: {e}"))?;
+    let content = SCShareableContent::get()
+        .map_err(|e| format!("ScreenCaptureKit shareable content: {e}"))?;
     let mut sources = Vec::new();
 
     for (index, display) in content.displays().into_iter().enumerate() {
@@ -78,7 +81,8 @@ fn dimension_from_points(value: f64) -> u32 {
 }
 
 fn resolve_filter(kind: SourceKind, source_id: u32) -> Result<(SCContentFilter, u32, u32), String> {
-    let content = SCShareableContent::get().map_err(|e| format!("ScreenCaptureKit enumerate sources: {e}"))?;
+    let content = SCShareableContent::get()
+        .map_err(|e| format!("ScreenCaptureKit enumerate sources: {e}"))?;
     match kind {
         SourceKind::Screen => {
             let display = content
@@ -101,7 +105,9 @@ fn resolve_filter(kind: SourceKind, source_id: u32) -> Result<(SCContentFilter, 
                 .find(|window| window.window_id() == source_id)
                 .ok_or_else(|| format!("ScreenCaptureKit window {source_id} not found"))?;
             if !window.is_on_screen() {
-                return Err(format!("ScreenCaptureKit window {source_id} is not on screen"));
+                return Err(format!(
+                    "ScreenCaptureKit window {source_id} is not on screen"
+                ));
             }
             let frame = window.frame();
             let width = dimension_from_points(frame.size.width);
@@ -112,7 +118,9 @@ fn resolve_filter(kind: SourceKind, source_id: u32) -> Result<(SCContentFilter, 
                 .map_err(|e| format!("ScreenCaptureKit window filter: {e}"))?;
             Ok((filter, width, height))
         }
-        SourceKind::Device => Err("camera sources are handled by the AVFoundation camera pipeline".to_owned()),
+        SourceKind::Device => {
+            Err("camera sources are handled by the AVFoundation camera pipeline".to_owned())
+        }
     }
 }
 
@@ -124,13 +132,19 @@ struct LatestFrame {
 
 impl LatestFrame {
     fn push(&self, surface: IOSurface) {
-        let mut latest = self.frame.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut latest = self
+            .frame
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         *latest = Some(surface);
         self.ready.notify_one();
     }
 
     fn take(&self, wait: Duration) -> Option<IOSurface> {
-        let mut latest = self.frame.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut latest = self
+            .frame
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if latest.is_none() && !wait.is_zero() {
             let (guard, _) = self
                 .ready
@@ -190,14 +204,13 @@ impl MacCapturePipeline {
     ) -> Result<Self, String> {
         let (filter, source_width, source_height) = resolve_filter(kind, source_id)?;
         if source_width < 2 || source_height < 2 {
-            return Err(format!("capture source has invalid dimensions {source_width}x{source_height}"));
+            return Err(format!(
+                "capture source has invalid dimensions {source_width}x{source_height}"
+            ));
         }
 
-        let (width, height) = output_dimensions(
-            source_width,
-            source_height,
-            settings.max_dimension,
-        );
+        let (width, height) =
+            output_dimensions(source_width, source_height, settings.max_dimension);
         let frame_rate = frame_rate(settings.max_fps);
         let interval = CMTime::new(1, frame_rate);
         let configuration = SCStreamConfiguration::new()
@@ -265,7 +278,11 @@ impl MacCapturePipeline {
         })
     }
 
-    fn encode_surface(&mut self, surface: &IOSurface, force_keyframe: bool) -> Result<Option<EncodedFrame>, String> {
+    fn encode_surface(
+        &mut self,
+        surface: &IOSurface,
+        force_keyframe: bool,
+    ) -> Result<Option<EncodedFrame>, String> {
         let presentation_time = CMTime::new(self.frame_index, self.frame_rate);
         self.frame_index = self.frame_index.saturating_add(1);
         let encoded = self
@@ -385,7 +402,9 @@ fn avcc_to_annex_b(
     parameter_sets: &[Vec<u8>],
 ) -> Result<(Vec<u8>, bool), String> {
     if !(1..=4).contains(&length_size) {
-        return Err(format!("VideoToolbox returned invalid NAL length size {length_size}"));
+        return Err(format!(
+            "VideoToolbox returned invalid NAL length size {length_size}"
+        ));
     }
     let mut nals: Vec<&[u8]> = Vec::new();
     let mut offset = 0usize;
@@ -408,14 +427,23 @@ fn avcc_to_annex_b(
         offset += length;
     }
 
-    let has_idr = nals.iter().any(|nal| nal.first().is_some_and(|byte| byte & 0x1f == 5));
-    let has_sps = nals.iter().any(|nal| nal.first().is_some_and(|byte| byte & 0x1f == 7));
-    let has_pps = nals.iter().any(|nal| nal.first().is_some_and(|byte| byte & 0x1f == 8));
+    let has_idr = nals
+        .iter()
+        .any(|nal| nal.first().is_some_and(|byte| byte & 0x1f == 5));
+    let has_sps = nals
+        .iter()
+        .any(|nal| nal.first().is_some_and(|byte| byte & 0x1f == 7));
+    let has_pps = nals
+        .iter()
+        .any(|nal| nal.first().is_some_and(|byte| byte & 0x1f == 8));
 
-    let mut annex_b = Vec::with_capacity(avcc.len() + parameter_sets.iter().map(Vec::len).sum::<usize>() + 32);
+    let mut annex_b =
+        Vec::with_capacity(avcc.len() + parameter_sets.iter().map(Vec::len).sum::<usize>() + 32);
     if has_idr {
         for parameter_set in parameter_sets {
-            let Some(header) = parameter_set.first() else { continue };
+            let Some(header) = parameter_set.first() else {
+                continue;
+            };
             let kind = header & 0x1f;
             if (kind == 7 && !has_sps) || (kind == 8 && !has_pps) {
                 annex_b.extend_from_slice(&[0, 0, 0, 1]);
@@ -464,13 +492,11 @@ mod tests {
 
     #[test]
     fn does_not_duplicate_parameter_sets_already_in_access_unit() {
-        let avcc = [0, 0, 0, 2, 0x67, 0x01, 0, 0, 0, 2, 0x68, 0x02, 0, 0, 0, 2, 0x65, 0xaa];
-        let (annex_b, keyframe) = avcc_to_annex_b(
-            &avcc,
-            4,
-            &[vec![0x67, 0x01], vec![0x68, 0x02]],
-        )
-        .unwrap();
+        let avcc = [
+            0, 0, 0, 2, 0x67, 0x01, 0, 0, 0, 2, 0x68, 0x02, 0, 0, 0, 2, 0x65, 0xaa,
+        ];
+        let (annex_b, keyframe) =
+            avcc_to_annex_b(&avcc, 4, &[vec![0x67, 0x01], vec![0x68, 0x02]]).unwrap();
         assert!(keyframe);
         assert_eq!(annex_b.len(), avcc.len() + 6);
     }
@@ -518,12 +544,12 @@ impl SCStreamOutputTrait for AudioOutput {
 pub(crate) fn start_desktop_audio(
     tx: std::sync::mpsc::SyncSender<Vec<f32>>,
 ) -> Result<MacDesktopAudioCapture, String> {
-    let content = SCShareableContent::get().map_err(|e| format!("ScreenCaptureKit audio permissions: {e}"))?;
-    let display = content
-        .displays()
-        .into_iter()
-        .next()
-        .ok_or_else(|| "ScreenCaptureKit found no display for system audio capture".to_owned())?;
+    let content = SCShareableContent::get()
+        .map_err(|e| format!("ScreenCaptureKit audio permissions: {e}"))?;
+    let display =
+        content.displays().into_iter().next().ok_or_else(|| {
+            "ScreenCaptureKit found no display for system audio capture".to_owned()
+        })?;
     let filter = SCContentFilter::create()
         .with_display(&display)
         .with_excluding_windows(&[])
@@ -579,7 +605,12 @@ fn sample_to_stereo_f32(sample: &CMSampleBuffer) -> Result<Vec<f32>, String> {
     Ok(stereo)
 }
 
-fn decode_pcm(data: &[u8], bits: u32, is_float: bool, big_endian: bool) -> Result<Vec<f32>, String> {
+fn decode_pcm(
+    data: &[u8],
+    bits: u32,
+    is_float: bool,
+    big_endian: bool,
+) -> Result<Vec<f32>, String> {
     let sample_bytes = usize::try_from(bits / 8).unwrap_or(0);
     if bits % 8 != 0 || sample_bytes == 0 {
         return Err(format!("unsupported PCM sample size {bits}"));
@@ -589,15 +620,41 @@ fn decode_pcm(data: &[u8], bits: u32, is_float: bool, big_endian: bool) -> Resul
         let value = match (is_float, bits, big_endian) {
             (true, 32, false) => f32::from_le_bytes(sample.try_into().map_err(|_| "bad float32")?),
             (true, 32, true) => f32::from_be_bytes(sample.try_into().map_err(|_| "bad float32")?),
-            (true, 64, false) => f64::from_le_bytes(sample.try_into().map_err(|_| "bad float64")?) as f32,
-            (true, 64, true) => f64::from_be_bytes(sample.try_into().map_err(|_| "bad float64")?) as f32,
-            (false, 16, false) => f32::from(i16::from_le_bytes(sample.try_into().map_err(|_| "bad int16")?)) / 32768.0,
-            (false, 16, true) => f32::from(i16::from_be_bytes(sample.try_into().map_err(|_| "bad int16")?)) / 32768.0,
-            (false, 32, false) => (i32::from_le_bytes(sample.try_into().map_err(|_| "bad int32")?) as f64 / 2_147_483_648.0) as f32,
-            (false, 32, true) => (i32::from_be_bytes(sample.try_into().map_err(|_| "bad int32")?) as f64 / 2_147_483_648.0) as f32,
-            _ => return Err(format!("unsupported PCM format: float={is_float}, bits={bits}")),
+            (true, 64, false) => {
+                f64::from_le_bytes(sample.try_into().map_err(|_| "bad float64")?) as f32
+            }
+            (true, 64, true) => {
+                f64::from_be_bytes(sample.try_into().map_err(|_| "bad float64")?) as f32
+            }
+            (false, 16, false) => {
+                f32::from(i16::from_le_bytes(
+                    sample.try_into().map_err(|_| "bad int16")?,
+                )) / 32768.0
+            }
+            (false, 16, true) => {
+                f32::from(i16::from_be_bytes(
+                    sample.try_into().map_err(|_| "bad int16")?,
+                )) / 32768.0
+            }
+            (false, 32, false) => {
+                (i32::from_le_bytes(sample.try_into().map_err(|_| "bad int32")?) as f64
+                    / 2_147_483_648.0) as f32
+            }
+            (false, 32, true) => {
+                (i32::from_be_bytes(sample.try_into().map_err(|_| "bad int32")?) as f64
+                    / 2_147_483_648.0) as f32
+            }
+            _ => {
+                return Err(format!(
+                    "unsupported PCM format: float={is_float}, bits={bits}"
+                ));
+            }
         };
-        output.push(if value.is_finite() { value.clamp(-1.0, 1.0) } else { 0.0 });
+        output.push(if value.is_finite() {
+            value.clamp(-1.0, 1.0)
+        } else {
+            0.0
+        });
     }
     Ok(output)
 }
@@ -614,14 +671,22 @@ fn interleave_stereo(buffers: &[(usize, Vec<f32>)], channels: usize) -> Result<V
         let mut output = Vec::with_capacity(frames * 2);
         for frame in data.chunks_exact(*buffer_channels) {
             let left = frame[0];
-            let right = if *buffer_channels == 1 { left } else { frame[1] };
+            let right = if *buffer_channels == 1 {
+                left
+            } else {
+                frame[1]
+            };
             output.extend_from_slice(&[left, right]);
         }
         return Ok(output);
     }
 
     if buffers.len() >= channels && buffers.iter().all(|(count, _)| *count == 1) {
-        let frames = buffers.iter().map(|(_, channel)| channel.len()).min().unwrap_or(0);
+        let frames = buffers
+            .iter()
+            .map(|(_, channel)| channel.len())
+            .min()
+            .unwrap_or(0);
         let mut output = Vec::with_capacity(frames * 2);
         for index in 0..frames {
             let left = buffers[0].1[index];
@@ -630,7 +695,10 @@ fn interleave_stereo(buffers: &[(usize, Vec<f32>)], channels: usize) -> Result<V
         }
         return Ok(output);
     }
-    Err(format!("unsupported AudioBufferList layout: {} buffers, {channels} channels", buffers.len()))
+    Err(format!(
+        "unsupported AudioBufferList layout: {} buffers, {channels} channels",
+        buffers.len()
+    ))
 }
 
 fn resample_stereo(input: &[f32], input_rate: f64) -> Vec<f32> {
@@ -671,9 +739,15 @@ mod audio_tests {
     #[test]
     fn converts_interleaved_and_planar_pcm_to_stereo() {
         let interleaved = [(2, vec![0.1, -0.1, 0.2, -0.2])];
-        assert_eq!(interleave_stereo(&interleaved, 2).unwrap(), [0.1, -0.1, 0.2, -0.2]);
+        assert_eq!(
+            interleave_stereo(&interleaved, 2).unwrap(),
+            [0.1, -0.1, 0.2, -0.2]
+        );
         let planar = [(1, vec![0.1, 0.2]), (1, vec![-0.1, -0.2])];
-        assert_eq!(interleave_stereo(&planar, 2).unwrap(), [0.1, -0.1, 0.2, -0.2]);
+        assert_eq!(
+            interleave_stereo(&planar, 2).unwrap(),
+            [0.1, -0.1, 0.2, -0.2]
+        );
     }
 
     #[test]
