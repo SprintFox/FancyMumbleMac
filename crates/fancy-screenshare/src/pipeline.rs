@@ -101,6 +101,12 @@ pub(crate) fn create_pipeline(
             .map(|p| Box::new(p) as Box<dyn EncodePipeline>);
     }
 
+    #[cfg(target_os = "macos")]
+    {
+        return crate::macos_capture::MacCapturePipeline::new(kind, source_id, settings)
+            .map(|pipeline| Box::new(pipeline) as Box<dyn EncodePipeline>);
+    }
+
     #[cfg(all(windows, feature = "gpu"))]
     if kind == SourceKind::Screen {
         // Tier 1: the D3D12-native pipeline (Windows 11 video encode API -
