@@ -499,12 +499,8 @@ mod tests {
         let monitor = monitors.first().expect("at least one active display");
         let id = monitor.id().expect("read display id");
 
-        let mut pipeline = create_pipeline(
-            SourceKind::Screen,
-            id,
-            EncodeSettings::default(),
-        )
-        .expect("construct the macOS screen pipeline");
+        let mut pipeline = create_pipeline(SourceKind::Screen, id, EncodeSettings::default())
+            .expect("construct the macOS screen pipeline");
 
         let frame = pipeline
             .next_frame(Duration::from_secs(2), true)
@@ -512,7 +508,10 @@ mod tests {
             .expect("the first capture must produce a frame");
 
         assert!(frame.keyframe, "first emitted frame must be an H.264 IDR");
-        assert!(!frame.data.is_empty(), "encoded H.264 access unit must not be empty");
+        assert!(
+            !frame.data.is_empty(),
+            "encoded H.264 access unit must not be empty"
+        );
         pipeline.shutdown();
     }
 
