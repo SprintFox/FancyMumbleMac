@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const invoke = vi.hoisted(() => vi.fn());
@@ -11,7 +12,7 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 vi.mock("../../elements/Modal", () => ({
-  Modal: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  Modal: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
 import ScreenSharePickerDialog from "./ScreenSharePickerDialog";
