@@ -7,6 +7,7 @@
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
+use apple_cf::cf::{AsCFType, CFDictionary, CFNumber, CFString};
 use apple_cf::iosurface::IOSurface;
 use screencapturekit::prelude::{
     CMSampleBuffer, CMSampleBufferExt, CMTime, PixelFormat, SCContentFilter, SCShareableContent,
@@ -319,7 +320,9 @@ impl EncodePipeline for MacCapturePipeline {
         };
         let force = force_keyframe || self.first_frame;
         let result = self.encode_surface(surface, force)?;
-        self.first_frame = false;
+        if result.as_ref().is_some_and(|frame| frame.keyframe) {
+            self.first_frame = false;
+        }
         Ok(result)
     }
 
@@ -328,6 +331,17 @@ impl EncodePipeline for MacCapturePipeline {
             return Ok(None);
         };
         self.encode_surface(surface, false)
+    }
+
+    fn set_bitrate(&mut self, bitrate_bps: u32) {
+        let key = CFString::new("AverageBitRate");
+        let value = CFNumber::from_u64(u64::from(bitrate_bps));
+        let properties = CFDictionary::from_pairs(&[(&key, &value)]);
+        if let Err(error) = self.encoder.set_properties(&properties) {
+            tracing::warn!(bitrate_bps, %error, "screenshare: VideoToolbox rejected a live bitrate update");
+        } else {
+            self.settings.bitrate_bps = bitrate_bps;
+        }
     }
 
     fn content_bitrate(&self) -> Option<u32> {
