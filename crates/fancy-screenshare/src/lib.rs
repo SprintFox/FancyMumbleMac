@@ -50,6 +50,13 @@ pub use congestion::CongestionSnapshot;
 pub use linux::portal_probe_main;
 pub use sources::{CaptureSource, SourceKind};
 
+/// Request macOS camera authorization through Nokhwa's AVFoundation backend.
+/// This must complete before `sources::list_sources_with_devices(true)`.
+#[cfg(target_os = "macos")]
+pub async fn request_camera_access() -> Result<bool, String> {
+    crate::camera::request_access().await
+}
+
 /// GNOME-native share flow: [`linux::native_portal_picker`] tells embedders
 /// to hide the in-app source picker (the compositor's portal dialog picks),
 /// [`linux::camera_portal`] runs the camera consent dialog, and
