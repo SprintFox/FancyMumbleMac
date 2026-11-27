@@ -91,27 +91,38 @@ pub fn list_sources_with_devices(include_devices: bool) -> Result<Vec<CaptureSou
     })
 }
 
+// CoreGraphics exposes the Screen Recording TCC functions as a C API.
+// Keep the only unsafe FFI boundary in this small, reviewed wrapper; the rest
+// of fancy-screenshare remains subject to the workspace's unsafe_code = deny.
 #[cfg(target_os = "macos")]
-#[link(name = "CoreGraphics", kind = "framework")]
-#[allow(non_snake_case)]
-unsafe extern "C" {
-    fn CGPreflightScreenCaptureAccess() -> bool;
-    fn CGRequestScreenCaptureAccess() -> bool;
+#[allow(unsafe_code)]
+mod screen_recording_permission {
+    #[link(name = "CoreGraphics", kind = "framework")]
+    #[allow(non_snake_case)]
+    unsafe extern "C" {
+        fn CGPreflightScreenCaptureAccess() -> bool;
+        fn CGRequestScreenCaptureAccess() -> bool;
+    }
+
+    pub(super) fn request_access() -> bool {
+        // Both APIs take no pointers and return a plain bool; there are no
+        // caller-side memory or lifetime obligations at this FFI boundary.
+        unsafe {
+            if CGPreflightScreenCaptureAccess() {
+                return true;
+            }
+            let _requested = CGRequestScreenCaptureAccess();
+            // Re-check: some macOS releases require the application to be
+            // relaunched after the user grants screen recording permission.
+            CGPreflightScreenCaptureAccess()
+        }
+    }
 }
 
 /// Request macOS Screen Recording permission using the documented CoreGraphics TCC API.
 #[cfg(target_os = "macos")]
 pub fn request_screen_capture_access() -> bool {
-    // Avoid showing a system prompt if access was already granted.
-    unsafe {
-        if CGPreflightScreenCaptureAccess() {
-            return true;
-        }
-        let _requested = CGRequestScreenCaptureAccess();
-        // Re-check: some macOS releases require the application to be
-        // relaunched after the user grants screen recording permission.
-        CGPreflightScreenCaptureAccess()
-    }
+    screen_recording_permission::request_access()
 }
 
 fn monitor_title(index: usize, name: Option<String>) -> String {
