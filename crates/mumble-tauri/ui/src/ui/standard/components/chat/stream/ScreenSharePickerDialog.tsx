@@ -124,6 +124,7 @@ export default function ScreenSharePickerDialog({
   const [sources, setSources] = useState<CaptureSource[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [thumbs, setThumbs] = useState<ReadonlyMap<string, string>>(new Map());
+  const [loadingDevices, setLoadingDevices] = useState(false);
   /** Selected screen OR window (they replace each other). */
   const [selectedDisplay, setSelectedDisplay] = useState<CaptureSource | null>(null);
   /** Selected camera; combinable with a display source. */
@@ -132,7 +133,16 @@ export default function ScreenSharePickerDialog({
 
   useEffect(() => {
     let cancelled = false;
-    invoke<CaptureSource[]>("list_capture_sources")
+    // A device-only picker is opened only after request_camera_access has
+    // completed in useScreenShare. Preserve cameras already in an active
+    // broadcast when opening the regular picker; otherwise defer AVFoundation
+    // enumeration until the user explicitly selects the Devices tab.
+    const includeDevices =
+      deviceOnly || (initialSelection ?? []).some((source) => source.kind === "device");
+    invoke<CaptureSource[]>(
+      "list_capture_sources",
+      includeDevices ? { includeDevices: true } : undefined,
+    )
       .then((list) => {
         if (cancelled) return;
         // Camera-only mode never shows (or thumbnails) screens/windows.
@@ -223,6 +233,32 @@ export default function ScreenSharePickerDialog({
     }
   };
 
+  const selectTab = async (next: PickerTab) => {
+    setTab(next);
+    setLoadError(null);
+    if (next !== "devices" || sources?.some((source) => source.kind === "device")) return;
+
+    setLoadingDevices(true);
+    try {
+      const granted = await invoke<boolean>("request_camera_access");
+      if (!granted) {
+        setLoadError("Camera access was denied in the system dialog.");
+        return;
+      }
+      const allSources = await invoke<CaptureSource[]>("list_capture_sources", {
+        includeDevices: true,
+      });
+      setSources((current) => [
+        ...(current ?? []).filter((source) => source.kind !== "device"),
+        ...allSources.filter((source) => source.kind === "device"),
+      ]);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setLoadingDevices(false);
+    }
+  };
+
   /** Double-click quick-share: this card plus the other group's pick. */
   const confirmWith = (src: CaptureSource) => {
     const display = src.kind === "device" ? selectedDisplay : src;
@@ -238,6 +274,7 @@ export default function ScreenSharePickerDialog({
 
   const renderStatus = (): string | null => {
     if (loadError !== null) return t("screenShare.picker.loadFailed", { detail: loadError });
+    if (loadingDevices) return t("screenShare.picker.loading");
     if (visibleSources === null) return t("screenShare.picker.loading");
     if (visibleSources.length === 0) {
       return tab === "devices" ? t("screenShare.picker.emptyDevices") : t("screenShare.picker.empty");
@@ -274,7 +311,7 @@ export default function ScreenSharePickerDialog({
                   role="tab"
                   aria-selected={tab === p}
                   className={`${styles.tab} ${tab === p ? styles.tabActive : ""}`}
-                  onClick={() => setTab(p)}
+                  onClick={() => void selectTab(p)}
                   data-testid={TID.screenSharePickerTab}
                   data-tab={p}
                 >
