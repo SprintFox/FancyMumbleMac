@@ -91,15 +91,16 @@ pub fn list_sources_with_devices(include_devices: bool) -> Result<Vec<CaptureSou
     })
 }
 
+#[cfg(target_os = "macos")]
+#[link(name = "CoreGraphics", kind = "framework")]
+unsafe extern "C" {
+    fn CGPreflightScreenCaptureAccess() -> bool;
+    fn CGRequestScreenCaptureAccess() -> bool;
+}
+
 /// Request macOS Screen Recording permission using the documented CoreGraphics TCC API.
 #[cfg(target_os = "macos")]
 pub fn request_screen_capture_access() -> bool {
-    #[link(name = "CoreGraphics", kind = "framework")]
-    unsafe extern "C" {
-        fn CGPreflightScreenCaptureAccess() -> bool;
-        fn CGRequestScreenCaptureAccess() -> bool;
-    }
-
     // Avoid showing a system prompt if access was already granted.
     unsafe {
         if CGPreflightScreenCaptureAccess() {
