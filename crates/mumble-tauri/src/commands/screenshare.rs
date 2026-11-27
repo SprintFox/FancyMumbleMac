@@ -259,10 +259,18 @@ pub(crate) fn active_broadcast_source() -> Option<(SourceKind, u32)> {
 
 /// List all capturable screens and windows for the source picker.
 #[tauri::command]
-pub(crate) async fn list_capture_sources() -> Result<Vec<CaptureSource>, String> {
-    tauri::async_runtime::spawn_blocking(fancy_screenshare::sources::list_sources)
-        .await
-        .map_err(|e| e.to_string())?
+pub(crate) async fn list_capture_sources(
+    include_devices: Option<bool>,
+) -> Result<Vec<CaptureSource>, String> {
+    // Avoid touching AVFoundation merely to open the screen picker. On
+    // macOS, devices are queried only after request_camera_access succeeds;
+    // other platforms retain their existing all-sources default.
+    let include_devices = include_devices.unwrap_or(!cfg!(target_os = "macos"));
+    tauri::async_runtime::spawn_blocking(move || {
+        fancy_screenshare::sources::list_sources_with_devices(include_devices)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// Capture a JPEG thumbnail (data URL) of one source for its picker card.
@@ -483,11 +491,19 @@ pub(crate) async fn request_camera_access() -> Result<bool, String> {
         .map_err(|e| e.to_string())?
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "macos")]
 #[tauri::command]
 pub(crate) async fn request_camera_access() -> Result<bool, String> {
-    // No consent portal outside Linux; the OS prompts on device open where
-    // it cares (macOS TCC).
+    // Nokhwa requires explicit AVFoundation initialization before even
+    // querying the camera list. Its callback completes after the macOS TCC
+    // consent dialog has been answered.
+    fancy_screenshare::request_camera_access().await
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+#[tauri::command]
+pub(crate) async fn request_camera_access() -> Result<bool, String> {
+    // The remaining native backend prompts when a device is opened.
     Ok(true)
 }
 
